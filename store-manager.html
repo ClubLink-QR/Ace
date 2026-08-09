@@ -484,6 +484,13 @@ body.login main{max-width:none;padding:0}
 .mq span{min-width:26px;text-align:center;font-family:var(--mono);font-size:15px;font-weight:700}
 
 /* ---------- 開閉セクション（▼で増やす／▲で減らす） ---------- */
+.bigsync{border-radius:var(--r);padding:14px 15px;border:1px solid var(--line);background:var(--surface)}
+.bigsync .bs-t{font-size:15.5px;font-weight:700;color:var(--muted)}
+.bigsync .bs-m{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.6}
+.bigsync.on{border-color:rgba(62,168,123,.5);background:linear-gradient(180deg,rgba(62,168,123,.12),transparent 70%),var(--surface)}
+.bigsync.on .bs-t{color:var(--st-serving)}
+.bigsync.ng{border-color:rgba(214,95,78,.5);background:linear-gradient(180deg,rgba(214,95,78,.10),transparent 70%),var(--surface)}
+.bigsync.ng .bs-t{color:var(--danger)}
 .errbox{background:rgba(214,95,78,.10);border:1px solid rgba(214,95,78,.35);border-radius:10px;
   padding:11px 13px;margin-top:9px;font-size:12px;line-height:1.75;color:var(--text)}
 .errbox b{display:block;color:var(--danger);font-size:11.5px;letter-spacing:.06em;margin-bottom:4px}
@@ -1672,42 +1679,39 @@ function viewSettings(){
     </div>
     <p class="note">注文端末が操作されないままこの時間が過ぎると、自動で待機画面に戻ります。注文を確定しても画面は戻りません。</p>`)}
 
-  ${sec("data","連携とデータ", state.storeCode||state.syncUrl ? (syncState.ok===true?"接続中":(syncState.ok===false?"エラー":"未確認")) : "未設定", `
-    <div class="field"><label>店舗コード</label>
+  ${sec("data","連携とデータ", state.storeCode||state.syncUrl ? (syncState.ok===true?"別端末と連携中":(syncState.ok===false?"エラー":"未確認")) : "未設定", `
+    <div class="bigsync ${syncState.ok===true?"on":(syncState.ok===false?"ng":"")}">
+      <div class="bs-t">${syncState.ok===true ? "別端末と連携中" : (syncState.ok===false ? "連携できていません" : "未接続")}</div>
+      <div class="bs-m">${esc(syncState.msg)}${syncState.lastOk ? `　最終通信 ${hhmm(syncState.lastOk)}` : ""}</div>
+    </div>
+    ${(syncState.detail && syncState.detail.length) ? `<div class="errbox">
+      <b>試したサービスと結果</b>
+      ${syncState.detail.map(d=>`<div>・${esc(d)}</div>`).join("")}
+    </div>` : ""}
+
+    <div class="field" style="margin-top:16px"><label>Firebase のURL（おすすめ）</label>
+      <input class="inp" value="${esc(state.syncUrl||"")}" data-syncurl="1"
+             placeholder="https://〇〇-default-rtdb.firebasedatabase.app/store.json">
+      <button class="btn wide" style="margin-top:8px" data-synctest="1">接続テスト</button>
+      <p class="round-hint">
+        <b>14台すべてに、まったく同じURLを貼ってください。</b>
+        これだけで別端末どうしが同期します。手順は同梱の <b>firebase-setup.md</b> に書いてあります。<br><br>
+        入力後に「接続テスト」を押して、上の表示が<b>「別端末と連携中」</b>になれば成功です。
+      </p></div>
+
+    <div class="field"><label>店舗コード（Firebaseを使わない場合）</label>
       ${state.storeCode ? `<div class="codebox">${esc(codeView(state.storeCode))}</div>` : ""}
       <input class="inp" value="${esc(state.storeCode||"")}" data-storecode="1"
              placeholder="他の端末で作ったコードを入力">
       <div class="quick" style="margin-top:8px">
         <button data-newcode="1">新しく作る</button>
-        <button data-synctest="1">接続テスト</button>
       </div>
-      <div class="sync ${syncState.ok===true?"":"off"}" style="margin-top:10px">
-        <span class="dot"></span>
-        ${syncState.ok===true ? "✓ " : (syncState.ok===false ? "× " : "")}${esc(syncState.msg)}
-        ${syncState.lastOk ? `（最終通信 ${hhmm(syncState.lastOk)}）` : ""}</div>
-      ${(syncState.detail && syncState.detail.length) ? `<div class="errbox">
-        <b>試したサービスと結果</b>
-        ${syncState.detail.map(d=>`<div>・${esc(d)}</div>`).join("")}
-        <div class="hint">すべて失敗した場合は、下の「独自サーバー」欄をお使いください。
-          Firebase のURLを入れると、登録は必要ですがリアルタイムで確実に同期します。</div>
-      </div>` : ""}
-      <p class="round-hint">
-        <b>1台目で「新しく作る」を押し、出てきたコードを他の端末に入力するだけです。</b>
-        同じコードの端末どうしが、ネットが別々でも自動で同期します。<br><br>
-        コードを知っていれば誰でもデータを見られます。人に見せないでください。
-      </p></div>
+      <p class="round-hint">上のFirebaseのURLが入っている場合は、そちらが優先されます。</p></div>
 
-    <div class="sync ${chan?"":"off"}"><span class="dot"></span>
-      同じブラウザの別タブ：${chan ? "連携中" : "使えません"}</div>
-    <div class="sync ${PERSIST?"":"off"}"><span class="dot"></span>
-      この端末への保存：${PERSIST ? "有効（再読み込みしても残ります）" : "無効"}</div>
-
-    <div class="field" style="margin-top:16px"><label>独自サーバーを使う場合（上級者向け）</label>
-      <input class="inp" value="${esc(state.syncUrl||"")}" data-syncurl="1"
-             placeholder="https://xxxx.workers.dev/sync">
-      <p class="round-hint">ここに入力すると、店舗コードより優先されます。
-        端末が多く通信量が増える場合や、データを自分で管理したい場合は、
-        同梱の <b>cloudflare-worker.js</b> の手順で自前のサーバーを用意できます。</p></div>
+    <div class="sync ${chan?"":"off"}" style="opacity:.65"><span class="dot"></span>
+      参考：同じ端末で複数タブを開いた場合の連携 ${chan ? "有効" : "無効"}</div>
+    <div class="sync ${PERSIST?"":"off"}" style="opacity:.65"><span class="dot"></span>
+      参考：この端末への保存 ${PERSIST ? "有効" : "無効"}</div>
 
     <button class="btn dan wide" style="margin-top:14px" data-reset="1">すべてリセット</button>`)}
   `;
@@ -2130,12 +2134,7 @@ document.addEventListener("click", e=>{
   if(d.btab){ state.billTable = d.btab; window.scrollTo(0,0); render(); return; }
   if(d.obill){ state.openBill = (state.openBill === d.obill) ? null : d.obill; render(); return; }
   if(d.synctest){ testSync(); return; }
-  if(d.newcode){
-    askConfirm({ title:"新しい店舗コードを作りますか？", ok:"作成する",
-      msg:"この端末の内容が新しいコードの中身になります。<br>2台目以降は作らずに、1台目のコードを入力してください。",
-      run:()=>createStoreCode() });
-    return;
-  }
+  if(d.newcode){ createStoreCode(); return; }
   if(d.sec){ state.openSecs[d.sec] = !state.openSecs[d.sec]; render(); return; }
   if(d.srange){
     if(!state.salesRange) state.salesRange = { from: todayStr(), to: todayStr() };
@@ -2628,6 +2627,8 @@ function netMsg(e){
   return m || "接続できません";
 }
 let remoteRev = 0, remoteTimer = null, es = null;
+let lastStamp = "";        // 取り込み済みの記録（誰が・いつ書いたか）
+let syncReady = false;     // 最初の取り込みが済むまで送信しない（他端末を空で上書きしないため）
 try {
   const c = localStorage.getItem(CODE_KEY);
   if(c) state.storeCode = c;
@@ -2653,6 +2654,7 @@ function syncNote(ok, msg){
 
 async function pushRemote(){
   if(!endpoint()) return;
+  if(!syncReady) return;      // 先に相手の内容を取り込むまで送らない
 
   /* (0) 店舗コード：公開の保管サービスを更新する */
   if(!state.syncUrl && state.storeCode){
@@ -2721,7 +2723,11 @@ function startStream(){
     // path が "/" のときは全体、それ以外は部分更新なので取り直す
     const rec = (m.path === "/" && m.data) ? m.data : null;
     if(!rec){ if(m.path && m.path !== "/") pullRemote(); return; }
+    syncReady = true;
     if(rec.from === CLIENT_ID) return;              // 自分が書いたものは無視
+    const st = (rec.at || 0) + ":" + (rec.from || "");
+    if(st === lastStamp) return;
+    lastStamp = st;
     remoteRev = rec.rev || remoteRev;
     if(rec.data) applyRemote(rec.data);
   };
@@ -2745,9 +2751,20 @@ async function pullRemote(){
     if(!res.ok){ syncNote(false, `サーバーがエラーを返しました（${res.status}）`); return; }
     const m = await res.json();
     syncNote(true, isFirebase(state.syncUrl) ? "接続中（リアルタイム）" : "接続中");
-    if(!m || m.from === CLIENT_ID || m.rev === remoteRev) return;
-    remoteRev = m.rev;
-    if(m.data) applyRemote(m.data);
+
+    // 相手にまだ何も無いなら、こちらの内容を最初の1件として送る
+    if(!m || !m.data){
+      syncReady = true;
+      await pushRemote();
+      return;
+    }
+    syncReady = true;
+    if(m.from === CLIENT_ID) return;                 // 自分が書いたものは無視
+    const stamp = (m.at || 0) + ":" + (m.from || "");
+    if(stamp === lastStamp) return;                  // 取り込み済み
+    lastStamp = stamp;
+    remoteRev = m.rev || remoteRev;
+    applyRemote(m.data);
   } catch(e){
     syncNote(false, netMsg(e));
   }
@@ -2825,6 +2842,7 @@ async function createStoreCode(){
   syncState.detail = errs;
   syncNote(false, "どのサービスにも接続できませんでした");
   render();
+  toast("接続できません：" + (errs[0] || ""));
 }
 
 function setStoreCode(code){
@@ -2833,8 +2851,8 @@ function setStoreCode(code){
     if(state.storeCode) localStorage.setItem(CODE_KEY, state.storeCode);
     else localStorage.removeItem(CODE_KEY);
   } catch(e){}
-  remoteRev = 0;
-  syncNote(null, state.storeCode ? "確認していません" : "未設定");
+  remoteRev = 0; lastStamp = ""; syncReady = false;
+  syncNote(null, state.storeCode ? "接続しています…" : "未設定");
   restartPolling();
   if(state.storeCode) pullRemote();
 }
@@ -2845,9 +2863,16 @@ function setSyncUrl(url){
     if(state.syncUrl) localStorage.setItem(SYNC_URL_KEY, state.syncUrl);
     else localStorage.removeItem(SYNC_URL_KEY);
   } catch(e){}
-  syncNote(null, state.syncUrl ? "確認していません" : "未設定");
-  restartPolling();
-  if(state.syncUrl) pullRemote();
+  lastStamp = ""; syncReady = false; remoteRev = 0;
+  syncNote(null, state.syncUrl ? "接続しています…" : "未設定");
+  stopStream();
+  if(state.syncUrl && isFirebase(state.syncUrl)){
+    startStream();            // 変更が向こうから届くリアルタイム接続
+    restartPolling();         // 取りこぼし対策の保険
+  } else {
+    restartPolling();
+  }
+  if(endpoint()) pullRemote();
 }
 if(endpoint()){                                   // 起動時、前回の設定があれば自動で再接続
   if(state.syncUrl && isFirebase(state.syncUrl)) startStream(); else restartPolling();
