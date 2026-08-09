@@ -484,6 +484,10 @@ body.login main{max-width:none;padding:0}
 .mq span{min-width:26px;text-align:center;font-family:var(--mono);font-size:15px;font-weight:700}
 
 /* ---------- 開閉セクション（▼で増やす／▲で減らす） ---------- */
+.errbox{background:rgba(214,95,78,.10);border:1px solid rgba(214,95,78,.35);border-radius:10px;
+  padding:11px 13px;margin-top:9px;font-size:12px;line-height:1.75;color:var(--text)}
+.errbox b{display:block;color:var(--danger);font-size:11.5px;letter-spacing:.06em;margin-bottom:4px}
+.errbox .hint{margin-top:7px;color:var(--muted);font-size:11.5px}
 .codebox{background:var(--surface2);border:1px solid rgba(215,178,109,.45);border-radius:10px;
   padding:14px 12px;margin-bottom:9px;text-align:center;font-family:var(--mono);
   font-size:17px;font-weight:700;color:var(--gold);letter-spacing:.06em;word-break:break-all}
@@ -1681,6 +1685,12 @@ function viewSettings(){
         <span class="dot"></span>
         ${syncState.ok===true ? "✓ " : (syncState.ok===false ? "× " : "")}${esc(syncState.msg)}
         ${syncState.lastOk ? `（最終通信 ${hhmm(syncState.lastOk)}）` : ""}</div>
+      ${(syncState.detail && syncState.detail.length) ? `<div class="errbox">
+        <b>試したサービスと結果</b>
+        ${syncState.detail.map(d=>`<div>・${esc(d)}</div>`).join("")}
+        <div class="hint">すべて失敗した場合は、下の「独自サーバー」欄をお使いください。
+          Firebase のURLを入れると、登録は必要ですがリアルタイムで確実に同期します。</div>
+      </div>` : ""}
       <p class="round-hint">
         <b>1台目で「新しく作る」を押し、出てきたコードを他の端末に入力するだけです。</b>
         同じコードの端末どうしが、ネットが別々でも自動で同期します。<br><br>
@@ -2536,17 +2546,87 @@ if(CLOUD){
    ------------------------------------------------------------------ */
 const SYNC_URL_KEY  = "store-manager-sync-url";
 const CODE_KEY      = "store-manager-code";
-/* 登録不要で使える公開の保管サービス。店舗コードはここでの保管場所のIDになる。 */
-const BLOB_API = "https://jsonblob.com/api/jsonBlob";
+/* 登録不要で使える公開の保管サービス。
+   ブラウザから使えるかはサービス側の設定（CORS）次第なので、
+   作成時に上から順に試して、成功したものを採用する。
+   店舗コードは「サービスの記号 - 保管場所のID」の形になる。 */
+const PROVIDERS = {
+  kv: {
+    name: "kvdb.io",
+    url: id => `https://kvdb.io/${id}/state`,
+    write: "PUT",
+    async create(payload){
+      const r = await fetch("https://kvdb.io/", {
+        method:"POST", headers:{ "Content-Type":"application/json" }, body:"{}" });
+      if(!r.ok) throw new Error(`作成を断られました（${r.status}）`);
+      const bucket = (await r.text()).trim();
+      if(!bucket || /\s/.test(bucket) || bucket.length > 80) throw new Error("IDを受け取れませんでした");
+      const w = await fetch(`https://kvdb.io/${bucket}/state`, {
+        method:"PUT", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload) });
+      if(!w.ok) throw new Error(`初期データの保存に失敗（${w.status}）`);
+      return bucket;
+    }
+  },
+  jb: {
+    name: "jsonblob.com",
+    url: id => `https://jsonblob.com/api/jsonBlob/${id}`,
+    write: "PUT",
+    async create(payload){
+      const r = await fetch("https://jsonblob.com/api/jsonBlob", {
+        method:"POST", headers:{ "Content-Type":"application/json", "Accept":"application/json" },
+        body: JSON.stringify(payload) });
+      if(!r.ok) throw new Error(`作成を断られました（${r.status}）`);
+      const loc = r.headers.get("Location") || r.headers.get("location");
+      if(!loc) throw new Error("IDを読み取れません（ブラウザの制限）");
+      return loc.split("/").pop();
+    }
+  },
+  js: {
+    name: "jsonstorage.net",
+    url: id => `https://api.jsonstorage.net/v1/json/${id}`,
+    write: "PUT",
+    async create(payload){
+      const r = await fetch("https://api.jsonstorage.net/v1/json", {
+        method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload) });
+      if(!r.ok) throw new Error(`作成を断られました（${r.status}）`);
+      const j = await r.json().catch(()=>null);
+      const uri = j && (j.uri || j.url);
+      if(!uri) throw new Error("IDを受け取れませんでした");
+      return String(uri).split("/").pop();
+    }
+  }
+};
+const PROVIDER_ORDER = ["kv","jb","js"];
 
-/* いま実際に使う接続先を決める（店舗コードが優先。独自URLがあればそちら） */
-function endpoint(){
-  if(state.syncUrl)   return state.syncUrl;
-  if(state.storeCode) return BLOB_API + "/" + state.storeCode;
-  return "";
+/* 店舗コードを「サービス」と「ID」に分解する */
+function parseCode(c){
+  const t = (c || "").trim();
+  if(!t) return null;
+  const m = t.match(/^([a-zA-Z]{2})-(.+)$/);
+  if(m && PROVIDERS[m[1].toLowerCase()]) return { p:m[1].toLowerCase(), id:m[2] };
+  return { p:"jb", id:t };            // 記号なしは古い形式（jsonblob）とみなす
 }
-const writeMethod = () => state.syncUrl ? "POST" : "PUT";   // jsonblobの更新はPUT
-const codeView = c => (c||"").replace(/(.{4})/g, "$1 ").trim();   // 4桁ずつ区切って読みやすく
+
+/* いま実際に使う接続先を決める（独自URLがあればそちら優先） */
+function endpoint(){
+  if(state.syncUrl) return state.syncUrl;
+  const c = parseCode(state.storeCode);
+  return c ? PROVIDERS[c.p].url(c.id) : "";
+}
+function codeWriteMethod(){
+  const c = parseCode(state.storeCode);
+  return c ? PROVIDERS[c.p].write : "PUT";
+}
+const writeMethod = () => state.syncUrl ? "POST" : codeWriteMethod();
+const codeView = c => c || "";
+
+/* 通信エラーを人に分かる言葉にする */
+function netMsg(e){
+  const m = (e && e.message) || "";
+  if(/failed to fetch|networkerror|load failed|network request failed/i.test(m))
+    return "ブラウザから接続できません（CORS制限またはネット未接続）";
+  return m || "接続できません";
+}
 let remoteRev = 0, remoteTimer = null, es = null;
 try {
   const c = localStorage.getItem(CODE_KEY);
@@ -2563,7 +2643,7 @@ function fbUrl(){
 }
 
 /* 接続状況を画面に出すための記録 */
-const syncState = { ok:null, msg:"未設定", lastOk:0, lastErr:"" };
+const syncState = { ok:null, msg:"未設定", lastOk:0, lastErr:"", detail:[] };
 
 function syncNote(ok, msg){
   syncState.ok = ok;
@@ -2574,12 +2654,12 @@ function syncNote(ok, msg){
 async function pushRemote(){
   if(!endpoint()) return;
 
-  /* (0) 店舗コード：公開の保管サービスを PUT で更新する */
+  /* (0) 店舗コード：公開の保管サービスを更新する */
   if(!state.syncUrl && state.storeCode){
     try{
       remoteRev++;
       const res = await fetch(endpoint(), {
-        method: "PUT",
+        method: codeWriteMethod(),
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ from:CLIENT_ID, rev:remoteRev, at:Date.now(), data:snapshot() })
       });
@@ -2587,7 +2667,7 @@ async function pushRemote(){
       else if(res.status === 429) syncNote(false, "通信が多すぎます。少し待つと自動で戻ります");
       else if(res.status === 404) syncNote(false, "この店舗コードは見つかりません。作り直してください");
       else syncNote(false, `保存に失敗しました（${res.status}）`);
-    } catch(e){ syncNote(false, "接続できません（通信状況を確認してください）"); }
+    } catch(e){ syncNote(false, netMsg(e)); }
     return;
   }
 
@@ -2669,7 +2749,7 @@ async function pullRemote(){
     remoteRev = m.rev;
     if(m.data) applyRemote(m.data);
   } catch(e){
-    syncNote(false, "サーバーに接続できません（URL・通信・CORS設定を確認）");
+    syncNote(false, netMsg(e));
   }
 }
 
@@ -2691,7 +2771,7 @@ async function testSync(){
   const url = state.syncUrl ? (isFirebase(state.syncUrl) ? fbUrl() : state.syncUrl) : endpoint();
   if(!url){ syncNote(false, "店舗コードが未設定です"); render(); return; }
   syncNote(null, "確認中…"); render();
-  const method = (!state.syncUrl && state.storeCode) ? "PUT"
+  const method = (!state.syncUrl && state.storeCode) ? codeWriteMethod()
                : (isFirebase(state.syncUrl) ? "PUT" : "POST");
   try{
     const res = await fetch(url, { cache:"no-store" });
@@ -2712,37 +2792,43 @@ async function testSync(){
     }
     else syncNote(false, `読み取りはできましたが、書き込みが ${w.status} で失敗しました`);
   } catch(e){
-    syncNote(false, "接続できません。コード／URLと通信状況を確認してください");
+    syncNote(false, netMsg(e));
   }
   render();
 }
 
-/* 店舗コードを新しく作る（1台目でだけ実行する） */
+/* 店舗コードを新しく作る（1台目でだけ実行する）
+   使えるサービスを上から順に試し、最初に成功したものを採用する。
+   全部だめなら、どれがなぜ失敗したかを画面に出す。 */
 async function createStoreCode(){
+  syncState.detail = [];
   syncNote(null, "店舗コードを作成中…"); render();
-  try{
-    const res = await fetch(BLOB_API, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify({ from:CLIENT_ID, rev:1, at:Date.now(), data:snapshot() })
-    });
-    const loc = res.headers.get("Location") || res.headers.get("location");
-    if(!res.ok || !loc){
-      syncNote(false, "店舗コードを作れませんでした。通信を確認するか、下の独自サーバー欄をお使いください");
+
+  const payload = { from:CLIENT_ID, rev:1, at:Date.now(), data:snapshot() };
+  const errs = [];
+
+  for(const key of PROVIDER_ORDER){
+    const pv = PROVIDERS[key];
+    syncNote(null, `${pv.name} を試しています…`); render();
+    try{
+      const id = await pv.create(payload);
+      setStoreCode(key + "-" + id);
+      remoteRev = 1;
+      syncState.detail = [];
+      syncNote(true, `店舗コードを作りました（${pv.name}）。他の端末にこのコードを入力してください`);
       render(); return;
+    } catch(e){
+      errs.push(`${pv.name}：${netMsg(e)}`);
     }
-    setStoreCode(loc.split("/").pop());
-    remoteRev = 1;
-    syncNote(true, "店舗コードを作りました。他の端末にこのコードを入力してください");
-    render();
-  } catch(e){
-    syncNote(false, "店舗コードを作れませんでした。通信を確認してください");
-    render();
   }
+
+  syncState.detail = errs;
+  syncNote(false, "どのサービスにも接続できませんでした");
+  render();
 }
 
 function setStoreCode(code){
-  state.storeCode = (code||"").replace(/[^0-9a-zA-Z]/g, "");
+  state.storeCode = (code||"").trim().replace(/[^0-9a-zA-Z_-]/g, "");
   try{
     if(state.storeCode) localStorage.setItem(CODE_KEY, state.storeCode);
     else localStorage.removeItem(CODE_KEY);
