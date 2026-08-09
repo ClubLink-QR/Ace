@@ -464,8 +464,14 @@ body.login main{max-width:none;padding:0}
 .nbadge.live{animation:badge 1.6s ease-in-out infinite}
 
 /* ---------- 縦型メニュー ---------- */
+.mcats{display:flex;gap:7px;overflow-x:auto;-webkit-overflow-scrolling:touch;
+  padding:2px 0 10px;position:sticky;top:var(--tb);z-index:12;background:var(--bg)}
+.mcats::-webkit-scrollbar{height:0}
+.mfil{flex:0 0 auto;padding:9px 15px;border-radius:999px;background:var(--surface);
+  border:1px solid var(--line);font-size:13px;font-weight:600;color:var(--muted);white-space:nowrap}
+.mfil[aria-pressed="true"]{border-color:var(--gold);color:var(--gold);background:var(--surface2)}
 .mlist{border-top:1px solid var(--line)}
-.mcat{position:sticky;top:var(--tb);z-index:10;background:var(--bg);
+.mcat{position:sticky;top:calc(var(--tb) + 44px);z-index:10;background:var(--bg);
   font-size:10.5px;letter-spacing:.16em;font-weight:700;color:var(--gold);
   padding:12px 2px 7px;border-bottom:1px solid var(--line)}
 .mrow{display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);
@@ -681,7 +687,7 @@ const state = {
   filter:"all",
   orderTable:null,     // 注文タブ（ホール・管理者）で選択中の卓
   deviceTable:null,    // この端末に固定された卓（歯車＋管理者PINで設定）
-  term:{ stage:"idle", tab:"menu" }   // 注文端末の画面状態
+  term:{ stage:"idle", tab:"menu", cat:"*" }   // 注文端末の画面状態
 };
 
 /* ========== helpers ========== */
@@ -1379,10 +1385,16 @@ function viewTerminal(){
 
   let body = "";
   if(state.term.tab === "menu"){
-    const gs = prodGroups();
-    body = gs.length
+    const all = prodGroups();
+    const cur = state.term.cat || "*";
+    const filter = `<div class="mcats">
+        <button class="mfil" data-mcat="*" aria-pressed="${cur==="*"}">すべて</button>
+        ${all.map(([c])=>`<button class="mfil" data-mcat="${esc(c)}" aria-pressed="${cur===c}">${esc(c)}</button>`).join("")}
+      </div>`;
+    const gs = cur === "*" ? all : all.filter(([c])=>c===cur);
+    body = filter + (gs.length
       ? `<div class="mlist">${gs.map(([c,ps])=>
-          `<div class="mcat">${esc(c)}</div>` + ps.map(p=>{
+          (cur === "*" ? `<div class="mcat">${esc(c)}</div>` : "") + ps.map(p=>{
             const q = (cartOf(tid).find(l=>l.productId===p.id)||{}).qty || 0;
             const so = soldOut(p);
             return `<div class="mrow ${q?"on":""} ${so?"sold":""}">
@@ -1394,7 +1406,7 @@ function viewTerminal(){
                   <button data-cqty="${tid}:${p.id}:1">＋</button></div>` : ""}
             </div>`;
           }).join("")).join("")}</div>`
-      : `<div class="empty">商品が登録されていません。</div>`;
+      : `<div class="empty">この ジャンルに商品がありません。</div>`);
   }
   else if(state.term.tab === "cart"){
     const c = cartOf(tid);
@@ -1947,7 +1959,7 @@ function renderNewRot(){
 
 /* ========== events ========== */
 document.addEventListener("click", e=>{
-  const el = e.target.closest("[data-newcode],[data-synctest],[data-btab],[data-obill],[data-receipt],[data-srange],[data-ptrack],[data-tcast],[data-persist],[data-firstoff],[data-dfee],[data-sec],[data-cat],[data-catadd],[data-catdel],[data-kdone],[data-kundo],[data-pstock],[data-feeon],[data-feetog],[data-idle],[data-okconfirm],[data-dev],[data-devclose],[data-devset],[data-tcancel],[data-tbus],[data-tstart],[data-thome],[data-ttab],[data-cadd],[data-cqty],[data-confirm],[data-cclear],[data-tbill],[data-key],[data-acct],[data-logout],[data-otab],[data-addacct],[data-adel],[data-tab],[data-filter],[data-table],[data-closesheet],[data-go],[data-guest],[data-new-rot],[data-order],[data-add],[data-qty],[data-addprod],[data-pdel],[data-pmv],[data-goto-rot],[data-next-rot],[data-pause-rot],[data-extend-rot],[data-close-rot],[data-restart-rot],[data-tcount],[data-tset],[data-dmin],[data-addcast],[data-delcast],[data-ctog],[data-deltable],[data-reset],[data-pick],[data-mv],[data-rm],[data-dguest],[data-dmin2],[data-dminset],[data-dper],[data-startrot]");
+  const el = e.target.closest("[data-mcat],[data-newcode],[data-synctest],[data-btab],[data-obill],[data-receipt],[data-srange],[data-ptrack],[data-tcast],[data-persist],[data-firstoff],[data-dfee],[data-sec],[data-cat],[data-catadd],[data-catdel],[data-kdone],[data-kundo],[data-pstock],[data-feeon],[data-feetog],[data-idle],[data-okconfirm],[data-dev],[data-devclose],[data-devset],[data-tcancel],[data-tbus],[data-tstart],[data-thome],[data-ttab],[data-cadd],[data-cqty],[data-confirm],[data-cclear],[data-tbill],[data-key],[data-acct],[data-logout],[data-otab],[data-addacct],[data-adel],[data-tab],[data-filter],[data-table],[data-closesheet],[data-go],[data-guest],[data-new-rot],[data-order],[data-add],[data-qty],[data-addprod],[data-pdel],[data-pmv],[data-goto-rot],[data-next-rot],[data-pause-rot],[data-extend-rot],[data-close-rot],[data-restart-rot],[data-tcount],[data-tset],[data-dmin],[data-addcast],[data-delcast],[data-ctog],[data-deltable],[data-reset],[data-pick],[data-mv],[data-rm],[data-dguest],[data-dmin2],[data-dminset],[data-dper],[data-startrot]");
   if(!el){
     if(e.target.dataset && e.target.dataset.sheet) closeSheet();
     return;
@@ -1966,7 +1978,7 @@ document.addEventListener("click", e=>{
   if(d.devclose){ devPin=""; devErr=""; devAuthed=false; closeSheet(); return; }
   if(d.devset){
     state.deviceTable = d.devset;
-    state.term = { stage:"idle", tab:"menu" };
+    state.term = { stage:"idle", tab:"menu", cat:"*" };
     devPin=""; devErr=""; devAuthed=false;
     closeSheet(); commit(); toast(`${tableOf(d.devset).name} 卓に設定しました`); return;
   }
@@ -1976,10 +1988,11 @@ document.addEventListener("click", e=>{
       go(t, "serving");                       // 入店時刻を打刻してセット料金・指名料を開始
       toast(`${hhmm(t.seatedAt)} 入店：セット料金 ${yen(setFee(t))} / 指名料 ${yen(state.fees.nom)}`);
     }
-    state.term = {stage:"active", tab:"menu"}; window.scrollTo(0,0); commit(); return;
+    state.term = {stage:"active", tab:"menu", cat:state.term.cat||"*"}; window.scrollTo(0,0); commit(); return;
   }
   if(d.thome){ state.term.stage = "idle"; window.scrollTo(0,0); render(); return; }
   if(d.ttab){ state.term.tab = d.ttab; window.scrollTo(0,0); render(); return; }
+  if(d.mcat){ state.term.cat = d.mcat; window.scrollTo(0,0); render(); return; }
   if(d.cadd){ const [tid,pid] = d.cadd.split(":"); cartAdd(tid,pid,1); commit(); return; }
   if(d.cqty){ const [tid,pid,dv] = d.cqty.split(":"); cartAdd(tid,pid,Number(dv)); commit(); return; }
   if(d.cclear){
@@ -2001,17 +2014,17 @@ document.addEventListener("click", e=>{
     const tid = d.tbill, t = tableOf(tid);
     askConfirm({ title:"会計に進みます", ok:"会計をお願いする",
       msg:`合計 <b style="color:var(--gold);font-family:var(--mono)">${yen(billTotal(t))}</b><br>これ以降このテーブルからは注文できなくなります。`,
-      run:()=>{ go(t,"billing"); state.term = {stage:"idle", tab:"menu"}; window.scrollTo(0,0); commit(); } });
+      run:()=>{ go(t,"billing"); state.term = {stage:"idle", tab:"menu", cat:"*"}; window.scrollTo(0,0); commit(); } });
     return;
   }
   if(d.tcancel){
     const t = tableOf(d.tcancel);
-    go(t,"serving"); state.term = {stage:"idle", tab:"menu"}; commit();
+    go(t,"serving"); state.term = {stage:"idle", tab:"menu", cat:"*"}; commit();
     toast("会計をキャンセルしました"); return;
   }
   if(d.tbus){
     const t = tableOf(d.tbus);
-    go(t,"empty"); state.term = {stage:"idle", tab:"menu"}; commit();
+    go(t,"empty"); state.term = {stage:"idle", tab:"menu", cat:"*"}; commit();
     toast("バッシング完了：空席に戻しました"); return;
   }
 
@@ -2029,7 +2042,7 @@ document.addEventListener("click", e=>{
         state.session = a.id;
         state.tab = ROLES[a.role].tabs[0];
         state.orderTable = null;
-        state.term = { stage:"idle", tab:"menu" };
+        state.term = { stage:"idle", tab:"menu", cat:"*" };
         restartPolling();
         commit(); toast(`${a.name}（${ROLES[a.role].label}）でログインしました`);
       } else {
@@ -2261,7 +2274,7 @@ document.addEventListener("click", e=>{
       run:()=>{
         state.tables.forEach(t=>{ t.status="empty"; t.guests=0; t.seatedAt=null; t.statusSince=Date.now(); });
         state.rotations = []; state.orders = {}; state.cart = {}; state.orderTable = null;
-        state.term = { stage:"idle", tab:"menu" };
+        state.term = { stage:"idle", tab:"menu", cat:"*" };
         commit(); toast("初期化しました");
       } });
     return;
@@ -2461,8 +2474,10 @@ const PERSIST = true;                  // 端末のブラウザに保存し、�
 const SYNC_KEY = "store-manager-v1";
 const CLOUD_KEY = "state";             // window.storage 上のキー
 const CLIENT_ID = uid();
+/* cart（確定前のカート）は端末ごとのものなので同期しない。
+   同期すると、確定してカートを空にした直後に他端末の古いカートが戻ってきてしまう。 */
 const SHARED = ["shopName","tables","casts","categories","products","accounts",
-                "orders","cart","fees","rotations","defaultMin","idleSec","rev","billHistory"];
+                "orders","fees","rotations","defaultMin","idleSec","rev","billHistory"];
 
 const CLOUD = !!(typeof window !== "undefined" && window.storage &&
                typeof window.storage.get === "function");   // 端末をまたぐ同期が使えるか
@@ -2894,7 +2909,7 @@ function resetIdle(){
   if(!state.session || roleOf() !== "order" || state.term.stage !== "active") return;
   idleTimer = setTimeout(()=>{
     if(state.session && roleOf() === "order" && state.term.stage === "active"){
-      state.term = { stage:"idle", tab:"menu" };
+      state.term = { stage:"idle", tab:"menu", cat:"*" };
       render();
     }
   }, Math.max(10, state.idleSec) * 1000);
