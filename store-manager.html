@@ -1579,16 +1579,39 @@ function viewOrder(){
   const total = billTotal(t);             // 料金＋注文
   const locked = t.status === "closed";   // 会計完了後は閲覧のみ
 
-  const qtyOf = pid => allLines(tid).filter(l=>l.productId===pid).reduce((s,l)=>s+l.qty,0);
+  /* 触れただけで伝票に入らないよう、いったんカートに入れてから確定する
+     （注文端末とまったく同じ流れ） */
+  const cartQty = pid => (cartOf(tid).find(l=>l.productId===pid)||{}).qty || 0;
   const prods = state.products.length
     ? state.products.map(p=>{
-        const q = qtyOf(p.id);
-        return `<button class="pcard" data-add="${tid}:${p.id}" ${locked?"disabled":""}>
-          ${q?`<span class="q">${q}</span>`:""}
-          <span class="pn">${esc(p.name)}</span>
-          <span class="pp">${yen(p.price)}</span></button>`;
+        const q = cartQty(p.id);
+        const so = soldOut(p);
+        return `<div class="tcard ${q?"on":""}">
+          <button class="ptap" data-cadd="${tid}:${p.id}" ${(locked||so)?"disabled":""}>
+            <span class="pn">${esc(p.name)}${so?`<em style="color:var(--danger);font-style:normal;font-size:10.5px"> 欠品</em>`:""}</span>
+            <span class="pp">${yen(p.price)}</span></button>
+          ${q ? `<div class="pqty">
+              <button data-cqty="${tid}:${p.id}:-1">−</button>
+              <span class="n">${q}</span>
+              <button data-cqty="${tid}:${p.id}:1">＋</button></div>` : ""}
+        </div>`;
       }).join("")
     : `<div class="empty">商品が登録されていません。設定タブから追加してください。</div>`;
+
+  const cc = cartCount(tid);
+  const cartBox = cc ? `<div class="slip" style="margin-bottom:12px;border-color:rgba(215,178,109,.45)">
+      <div class="bhead first">未確定のご注文<span>${yen(cartTotal(tid))}</span></div>
+      ${cartOf(tid).map(l=>`<div class="srow">
+        <div class="sn">${esc(l.name)}<span>${yen(l.price)}</span></div>
+        <div class="sqc">
+          <button data-cqty="${tid}:${l.productId}:-1">−</button>
+          <span class="q">${l.qty}</span>
+          <button data-cqty="${tid}:${l.productId}:1">＋</button></div>
+        <div class="ss">${yen(l.price*l.qty)}</div></div>`).join("")}
+      <div class="sact" style="display:flex;gap:8px">
+        <button class="btn gh" data-cclear="${tid}">取り消す</button>
+        <button class="btn pri" data-confirm="${tid}" style="flex:1">注文を確定する（${cc}点）</button>
+      </div></div>` : "";
 
   const fl = feeLines(t);
   const feeRows = fl.length
@@ -1628,7 +1651,7 @@ function viewOrder(){
       <div class="obtotal">${yen(total)}</div>
     </div>
     <div class="owrap">
-      <div><div class="pgrid">${prods}</div></div>
+      <div>${cartBox}<div class="pgrid">${prods}</div></div>
       <aside class="slip">
         <div class="sec-head" style="margin-top:0"><h2>伝票 ${bs.length?`（${orderCount(tid)}点）`:""}</h2><div class="rule"></div></div>
         ${feeRows}${rows}
@@ -2086,7 +2109,7 @@ function renderNewRot(){
 
 /* ========== events ========== */
 document.addEventListener("click", e=>{
-  const el = e.target.closest("[data-mcat],[data-newcode],[data-synctest],[data-btab],[data-obill],[data-receipt],[data-srange],[data-ptrack],[data-tcast],[data-persist],[data-firstoff],[data-dfee],[data-sec],[data-cat],[data-catadd],[data-catdel],[data-kdone],[data-kundo],[data-pstock],[data-feeon],[data-feetog],[data-idle],[data-okconfirm],[data-dev],[data-devclose],[data-devset],[data-tcancel],[data-tbus],[data-tstart],[data-thome],[data-ttab],[data-cadd],[data-cqty],[data-confirm],[data-cclear],[data-tbill],[data-key],[data-acct],[data-logout],[data-otab],[data-addacct],[data-adel],[data-tab],[data-filter],[data-table],[data-closesheet],[data-go],[data-guest],[data-new-rot],[data-order],[data-add],[data-qty],[data-addprod],[data-pdel],[data-pmv],[data-goto-rot],[data-next-rot],[data-pause-rot],[data-extend-rot],[data-close-rot],[data-restart-rot],[data-tcount],[data-tset],[data-dmin],[data-addcast],[data-delcast],[data-ctog],[data-deltable],[data-reset],[data-pick],[data-mv],[data-rm],[data-dguest],[data-dmin2],[data-dminset],[data-dper],[data-startrot]");
+  const el = e.target.closest("[data-mcat],[data-newcode],[data-synctest],[data-btab],[data-obill],[data-receipt],[data-srange],[data-ptrack],[data-tcast],[data-persist],[data-firstoff],[data-dfee],[data-sec],[data-cat],[data-catadd],[data-catdel],[data-kdone],[data-kundo],[data-pstock],[data-feeon],[data-feetog],[data-idle],[data-okconfirm],[data-dev],[data-devclose],[data-devset],[data-tcancel],[data-tbus],[data-tstart],[data-thome],[data-ttab],[data-cadd],[data-cqty],[data-confirm],[data-cclear],[data-tbill],[data-key],[data-acct],[data-logout],[data-otab],[data-addacct],[data-adel],[data-tab],[data-filter],[data-table],[data-closesheet],[data-go],[data-guest],[data-new-rot],[data-order],[data-qty],[data-addprod],[data-pdel],[data-pmv],[data-goto-rot],[data-next-rot],[data-pause-rot],[data-extend-rot],[data-close-rot],[data-restart-rot],[data-tcount],[data-tset],[data-dmin],[data-addcast],[data-delcast],[data-ctog],[data-deltable],[data-reset],[data-pick],[data-mv],[data-rm],[data-dguest],[data-dmin2],[data-dminset],[data-dper],[data-startrot]");
   if(!el){
     if(e.target.dataset && e.target.dataset.sheet) closeSheet();
     return;
@@ -2145,7 +2168,7 @@ document.addEventListener("click", e=>{
   if(d.confirm){
     const n = cartCount(d.confirm), amt = cartTotal(d.confirm);
     if(!cartConfirm(d.confirm)) return;
-    state.term.tab = "menu";          // 待機画面には戻さず、続けて注文できるようにする
+    if(roleOf() === "order") state.term.tab = "menu";   // 端末は待機画面に戻さず続けて注文できるように
     window.scrollTo(0,0); commit();
     toast(`注文を確定しました（${n}点 ${yen(amt)}）`); return;
   }
@@ -2244,11 +2267,6 @@ document.addEventListener("click", e=>{
     state.orderTable = d.order; state.tab = "order"; closeSheet(); window.scrollTo(0,0); commit(); return;
   }
   if(d.otab){ state.orderTable = d.otab; commit(); return; }
-  if(d.add){
-    const [tid,pid] = d.add.split(":"); const t = tableOf(tid);
-    if(t.status === "empty") go(t,"serving");     // 注文が入った時点で接客中に
-    addLine(tid,pid); commit(); return;
-  }
   if(d.qty){ const [tid,lid,dv] = d.qty.split(":"); setQty(tid,lid,Number(dv)); commit(); return; }
 
   /* accounts */
