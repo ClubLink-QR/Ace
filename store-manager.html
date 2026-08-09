@@ -31,6 +31,7 @@ button,.mrow,.card,.tchip,.pcard,.tcard,.mfil,.grph,.secth{
   -webkit-user-select:none;user-select:none} /* 連打時に文字が選択されるのを防ぐ */
 html,body{margin:0;padding:0}
 body{
+  overflow-x:hidden;                         /* 端が切れて見えなくなるのを防ぐ */
   background:var(--bg);color:var(--text);font-family:var(--font);
   font-size:15px;line-height:1.5;
   padding-bottom:calc(72px + env(safe-area-inset-bottom));
@@ -70,7 +71,7 @@ button{cursor:pointer;border:0;background:none}
 .syncdot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;margin-left:2px}
 .syncdot.on{background:var(--st-serving)}
 .syncdot.off{background:var(--st-empty)}
-@media(max-width:539px){
+@media(max-width:679px){
   .clock{display:none}                       /* 時計を隠してアカウント表示を確保 */
   .acct .an{max-width:64px}
 }
@@ -337,7 +338,7 @@ body.login main{max-width:none;padding:0}
 .slip{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 13px}
 .srow{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
 .srow:last-of-type{border-bottom:0}
-.sn{flex:1;min-width:0;font-size:13.5px;line-height:1.35}
+.sn{flex:1;min-width:0;font-size:13.5px;line-height:1.35;overflow-wrap:anywhere}
 .sn span{display:block;font-family:var(--mono);font-size:11px;color:var(--muted)}
 .sqc{display:flex;align-items:center;gap:4px;flex:0 0 auto}
 .sqc button{width:29px;height:29px;border-radius:7px;background:var(--surface2);border:1px solid var(--line);
@@ -414,7 +415,7 @@ body.login main{max-width:none;padding:0}
   letter-spacing:.1em;color:var(--muted);font-weight:700}
 .hbatch .hh .amt{margin-left:auto;font-family:var(--mono);color:var(--gold);font-size:13px;letter-spacing:0}
 .hline{display:flex;gap:8px;font-size:13.5px;padding:3px 0}
-.hline .n{flex:1;min-width:0}
+.hline .n{flex:1;min-width:0;overflow-wrap:anywhere}
 .hline .q{font-family:var(--mono);color:var(--muted)}
 .hline .a{width:74px;text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
 
@@ -487,7 +488,7 @@ body.login main{max-width:none;padding:0}
 .mrow.on{background:rgba(215,178,109,.07);box-shadow:inset 3px 0 0 var(--gold)}
 .mrow.sold{opacity:.42}
 .mtap{flex:1;min-width:0;display:flex;align-items:center;gap:12px;padding:15px 10px 15px 12px;text-align:left}
-.mn{flex:1;min-width:0;font-size:15px;font-weight:600;line-height:1.35}
+.mn{flex:1;min-width:0;font-size:15px;font-weight:600;line-height:1.35;overflow-wrap:anywhere}
 .mn em{font-style:normal;margin-left:8px;font-size:10.5px;font-weight:700;color:var(--danger);
   border:1px solid rgba(214,95,78,.4);border-radius:5px;padding:2px 6px;vertical-align:2px}
 .mp{font-family:var(--mono);font-size:14px;color:var(--muted);font-variant-numeric:tabular-nums;flex:0 0 auto}
@@ -523,7 +524,8 @@ body.login main{max-width:none;padding:0}
   padding:10px 0;border-bottom:1px solid var(--line);font-size:13.5px}
 .ctr:last-child{border-bottom:0}
 .ctr.ch{font-size:10.5px;letter-spacing:.08em;color:var(--muted);font-weight:700;padding:9px 0 8px}
-.ctr span:not(:first-child){text-align:center;font-family:var(--mono)}
+.ctr span{min-width:0;overflow-wrap:anywhere}
+.ctr span:not(:first-child){text-align:center;font-family:var(--mono);overflow-wrap:normal}
 .ctr .amt{text-align:right;color:var(--gold);font-weight:700}
 
 .sect{border-bottom:1px solid var(--line)}
@@ -593,6 +595,67 @@ body.login main{max-width:none;padding:0}
   padding:6px 4px;text-align:center;font-family:var(--mono);font-size:14px}
 .prow-b .sq{width:30px;height:30px;border-radius:7px;background:var(--surface2);border:1px solid var(--line);
   display:grid;place-items:center;font-size:15px;color:var(--text);flex:0 0 auto}
+
+/* ---------- スマートフォン幅への対応（タブレットの表示は変えない） ---------- */
+@media(max-width:480px){
+  main{padding:12px 10px}
+  .topbar-in{padding:6px 10px;gap:8px;min-height:48px}
+  .acct{min-height:40px;padding:3px 8px 3px 3px}
+  .acct .av{width:24px;height:24px;font-size:11px}
+  .acct .an{max-width:58px;font-size:11.5px}
+  .brand b{font-size:13.5px}
+
+  .tabs{padding:6px 8px calc(6px + env(safe-area-inset-bottom))}
+  .tabs button{min-width:50px;padding:9px 5px;font-size:11.5px}
+
+  .grid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+  .card{min-height:104px;padding:10px 10px 9px}
+  .card .name{font-size:19px}
+  .card .meta{font-size:11px}
+  .summary{gap:6px}
+  .chip{padding:6px 10px;font-size:11.5px}
+
+  .sect .secth{padding:14px 2px}
+  .secth .stt{font-size:13.5px}
+  .prow{padding:8px}
+  .prow .nm{flex:1 1 100%;min-width:0}
+  .prow-b{flex-wrap:wrap;justify-content:flex-end;gap:5px}
+  .prow .rl{width:88px;font-size:12px;padding:6px}
+  .prow .pr{width:74px;font-size:13px}
+  .prow .flab{flex:1 1 100%;font-size:13px}
+  .setrow{padding:7px 8px}
+
+  .slip{padding:10px}
+  .sn{font-size:12.5px}
+  .ss{width:64px;font-size:12.5px}
+  .stotal b{font-size:19px}
+  .gtotal b{font-size:20px}
+
+  .orderbar{margin:0 -10px 12px;padding:9px 10px}
+  .obt{font-size:17px}
+  .obtotal{font-size:17px}
+
+  .mtap{padding:13px 8px 13px 10px}
+  .mn{font-size:14px}
+  .mp{font-size:13px}
+  .mq button{width:32px;height:32px}
+  .mfil{padding:8px 13px;font-size:12.5px}
+
+  .ctr{grid-template-columns:1.3fr .55fr .55fr .55fr 1fr;gap:4px;font-size:12px}
+  .ctr.ch{font-size:9.5px}
+  .daterow .inp{flex:1 1 100%}
+
+  .rot{padding:12px}
+  .rot-cast .nm{font-size:clamp(21px,6.4vw,32px)}
+  .rot-time .tm{font-size:clamp(21px,6.4vw,32px)}
+
+  .keypad button{height:52px;font-size:20px}
+  .login-card{max-width:290px}
+  .panel{padding:16px 12px calc(18px + env(safe-area-inset-bottom))}
+  .term-head{gap:8px}
+  .th-no{font-size:19px}
+  .korder{padding:11px 12px}
+}
 
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom));
   background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:10px 16px;
@@ -934,6 +997,7 @@ function render(){
   lastRev = state.rev;
 
   /* 固定フッターぶんの余白を実寸で確保 */
+  fitTopbar();
   const foot = document.querySelector(".termfoot");
   document.body.style.paddingBottom = foot ? (foot.offsetHeight + 18) + "px" : "";
   tick();
@@ -2961,6 +3025,18 @@ function commit(){
   syncTimer = setTimeout(()=>{ send(); saveLocal(); pushCloud(); pushRemote(); }, 60);
 }
 const syncOn = () => !!chan || CLOUD;
+
+/* ヘッダーの実際の高さを測って、貼り付く要素の位置を合わせる。
+   端末や文字サイズでヘッダーの高さが変わるため、固定値だと下に隠れてしまう。 */
+function fitTopbar(){
+  const tb = document.querySelector(".topbar");
+  const h = tb ? tb.offsetHeight : 0;
+  if(h > 0) document.documentElement.style.setProperty("--tb", h + "px");
+}
+if(typeof window !== "undefined"){
+  window.addEventListener("resize", fitTopbar);
+  window.addEventListener("orientationchange", ()=>setTimeout(fitTopbar, 200));
+}
 
 /* ---- 注文端末：無操作が続いたら待機画面に戻す ---- */
 let idleTimer = null;
