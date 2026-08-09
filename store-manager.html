@@ -37,7 +37,7 @@ body{
   padding-bottom:calc(72px + env(safe-area-inset-bottom));
   -webkit-text-size-adjust:100%;
 }
-@media(min-width:760px){body{padding-bottom:24px}}
+@media(min-width:600px){body{padding-bottom:24px}}
 button,input,select,textarea{font-family:inherit;font-size:inherit;color:var(--text)}
 select{-webkit-appearance:none;appearance:none;background-image:none}
 select,option,optgroup{background-color:#1D2230;color:#E8EBF1}
@@ -57,11 +57,11 @@ button{cursor:pointer;border:0;background:none}
   max-width:1280px;margin:0 auto;padding:8px 14px;min-height:52px;
   display:flex;align-items:center;gap:10px;
 }
-@media(min-width:760px){.topbar-in{min-height:58px}}
-.brand{display:flex;align-items:baseline;gap:8px;min-width:0}
+@media(min-width:600px){.topbar-in{min-height:52px}}
+.brand{display:flex;align-items:baseline;gap:8px;min-width:0;flex:1 1 auto;overflow:hidden}
 .brand b{font-size:15px;font-weight:700;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .brand span{font-size:11px;color:var(--muted);letter-spacing:.14em}
-.clock{margin-left:auto;font-family:var(--mono);font-size:15px;color:var(--gold);font-variant-numeric:tabular-nums}
+.clock{margin-left:auto;flex:0 0 auto;font-family:var(--mono);font-size:15px;color:var(--gold);font-variant-numeric:tabular-nums}
 .acct{display:flex;align-items:center;gap:7px;padding:4px 10px 4px 4px;border-radius:999px;
   background:var(--surface2);border:1px solid var(--line);flex:0 0 auto}
 .acct .av{width:26px;height:26px;border-radius:50%;background:var(--gold);color:#14171E;
@@ -75,29 +75,63 @@ button{cursor:pointer;border:0;background:none}
   .clock{display:none}                       /* 時計を隠してアカウント表示を確保 */
   .acct .an{max-width:64px}
 }
-.acct{min-height:44px}                       /* 指で押しやすい大きさを確保 */
+.acct{min-height:44px;flex:0 0 auto}         /* 押しやすさを確保しつつ、絶対に縮ませない */
 
 /* ---------- tabs ---------- */
+/* スマホ縦：タブは画面下に固定（親指で届く位置） */
 .tabs{
   position:fixed;left:0;right:0;bottom:0;z-index:40;
-  display:flex;gap:4px;padding:8px 12px calc(8px + env(safe-area-inset-bottom));
+  display:flex;gap:4px;padding:8px 10px calc(8px + env(safe-area-inset-bottom));
   background:rgba(16,19,25,.96);border-top:1px solid var(--line);backdrop-filter:blur(10px);
+  overflow-x:auto;-webkit-overflow-scrolling:touch;
 }
-.tabs{overflow-x:auto;-webkit-overflow-scrolling:touch}
 .tabs::-webkit-scrollbar{height:0}
 .tabs button{
-  flex:1 0 auto;min-width:58px;padding:11px 8px;border-radius:10px;font-size:12.5px;font-weight:600;
+  flex:1 0 auto;min-width:52px;padding:10px 6px;border-radius:10px;font-size:12px;font-weight:600;
   color:var(--muted);background:transparent;transition:background .15s,color .15s;
 }
 .tabs button[aria-selected="true"]{background:var(--surface2);color:var(--gold)}
-@media(min-width:760px){
-  .tabs{position:static;background:none;border:0;padding:0;backdrop-filter:none;
-    gap:2px;flex:0 0 auto;background:var(--surface2);border-radius:11px;padding:3px}
-  .tabs button{flex:0 0 auto;padding:7px 18px;font-size:13px}
+/* タブレット・PC：タブはヘッダーの2段目に置く。
+   1段目（店名・アカウント）とは別行なので、タブが増えても
+   ログアウトボタンが押し出されることがない。 */
+@media(min-width:600px){
+  .tabs{position:static;border-top:0;backdrop-filter:none;background:none;
+    max-width:1280px;margin:0 auto;padding:0 14px 8px;gap:4px}
+  .tabs button{flex:0 0 auto;min-width:0;padding:8px 16px;font-size:13px;
+    background:var(--surface2)}
+  .tabs button[aria-selected="true"]{background:var(--surface2);color:var(--gold);
+    box-shadow:inset 0 0 0 1px rgba(215,178,109,.45)}
+}
+@media(min-width:1100px){
+  .tabs button{padding:9px 22px;font-size:13.5px}
+}
+/* スマホ横向き：縦の余白が少ないのでヘッダーを詰める */
+@media(orientation:landscape) and (max-height:520px){
+  .topbar-in{min-height:38px;padding:4px 12px}
+  .tabs{padding:0 12px 5px}
+  .tabs button{padding:6px 13px;font-size:12px}
+  .brand b{font-size:13px}
+  .acct{min-height:34px}
+  .acct .av{width:22px;height:22px;font-size:10.5px}
 }
 
-/* ---------- layout ---------- */
+/* ---------- layout ----------
+   スマホ縦 → スマホ横 → タブレット → PC の順に情報量を増やす。
+   基準はタブレット（横）。 */
 main{max-width:1280px;margin:0 auto;padding:14px}
+
+/* タブレット横：卓を広めに、伝票は2カラム */
+@media(min-width:900px){
+  main{padding:16px 20px}
+}
+/* PC：さらに広く使い、一覧の列数を増やす */
+@media(min-width:1280px){
+  main{padding:20px 28px}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
+  .pgrid{grid-template-columns:repeat(auto-fill,minmax(168px,1fr))}
+  .card{min-height:130px}
+  .card .name{font-size:23px}
+}
 .sec-head{display:flex;align-items:center;gap:10px;margin:22px 0 10px}
 .sec-head:first-child{margin-top:4px}
 .sec-head h2{margin:0;font-size:12px;font-weight:700;letter-spacing:.16em;color:var(--muted)}
@@ -273,8 +307,7 @@ main{max-width:1280px;margin:0 auto;padding:14px}
 .note{font-size:12px;color:var(--muted);line-height:1.7;margin:8px 0 0}
 
 /* ---------- login ---------- */
-:root{--tb:53px}
-@media(min-width:760px){:root{--tb:59px}}
+:root{--tb:96px}   /* 起動直後の暫定値。実際の高さは fitTopbar() が測って上書きする */
 body.login{padding:0}
 body.login .topbar{display:none}
 body.login main{max-width:none;padding:0}
@@ -660,7 +693,7 @@ body.login main{max-width:none;padding:0}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom));
   background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:10px 16px;
   font-size:13px;z-index:80;box-shadow:0 8px 24px rgba(0,0,0,.5);animation:toastIn .18s ease-out}
-@media(min-width:760px){.toast{bottom:24px}}
+@media(min-width:600px){.toast{bottom:24px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -669,10 +702,10 @@ body.login main{max-width:none;padding:0}
 <header class="topbar">
   <div class="topbar-in">
     <div class="brand"><b id="shopName">店舗管理</b></div>
-    <nav class="tabs" id="tabs" role="tablist"></nav>
     <div class="clock" id="clock">--:--</div>
     <button class="acct" id="acct" data-acct="1"></button>
   </div>
+  <nav class="tabs" id="tabs" role="tablist"></nav>
 </header>
 
 <main id="view"></main>
