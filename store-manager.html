@@ -679,6 +679,7 @@ const state = {
     service:10, serviceOn:true,   // サービス料（％）
     tax:10,     taxOn:true        // 消費税（％）
   },
+  logoutPin: "1234",   // ログアウトに必要なパスワード
   idleSec: 60,         // 注文端末が待機画面に戻るまでの無操作時間
   openCats: {},        // 商品・在庫で開いているジャンル
   openSecs: {},        // 設定で開いているセクション
@@ -912,10 +913,11 @@ function render(){
   $("#tabs").style.display = tabs.length > 1 ? "" : "none";
 
   const a = acctOf();
+  const linked = syncState.ok === true;
+  $("#acct").setAttribute("aria-label", `${a.name}（${ROLES[a.role].label}）／ログアウト`);
   $("#acct").innerHTML = `<span class="av">${esc((a.name||"?").slice(0,1))}</span>
     <span class="an">${esc(a.name)}<small>${ROLES[a.role].label}</small></span>
-    <span class="syncdot ${typeof CLOUD!=="undefined"&&CLOUD?"on":"off"}" title="${
-      typeof CLOUD!=="undefined"&&CLOUD?"他端末と連携中":"この端末のみ（連携なし）"}"></span>`;
+    <span class="syncdot ${linked?"on":"off"}" title="${linked?"他端末と連携中":"この端末のみ"}"></span>`;
 
   if(state.orderTable && !tableOf(state.orderTable)) state.orderTable = null;
   const isTerm = roleOf() === "order";
@@ -1633,6 +1635,11 @@ function viewSettings(){
   ${sec("accounts","アカウントと権限", state.accounts.length+"件", `
     ${acs}
     <button class="add" data-addacct="1" style="margin-top:8px">＋ アカウントを追加</button>
+    <div class="prow" style="margin-top:12px">
+      <span class="flab">ログアウト用パスワード<small>右上のアカウントから抜けるときに必要</small></span>
+      <div class="prow-b">
+        <input class="inp pin" inputmode="numeric" maxlength="8"
+               value="${esc(state.logoutPin||"")}" data-logoutpw="1"></div></div>
     <div class="flow" style="margin-top:10px">
       <b style="color:var(--gold)">注文専用</b><i>注文と会計依頼、バッシング完了。卓番は端末側で設定</i><br>
       <b style="color:var(--gold)">厨房</b><i>オーダー通知と在庫のみ</i><br>
@@ -1877,6 +1884,20 @@ function sheetBill(tid){
     <div class="sheet-acts"><button class="btn gh" data-closesheet="1">閉じる</button></div>`);
 }
 
+/* ログアウトはパスワードを入れてから */
+let logoutPin = "", logoutErr = "";
+function sheetLogout(){
+  const a = acctOf();
+  openSheet(`<h3>ログアウト<small>${a?esc(a.name)+"（"+ROLES[a.role].label+"）":""}</small></h3>
+    <div class="field"><label>パスワード</label>
+      <input class="inp pinbox" id="logoutPinInput" data-logoutpin="1" type="password"
+             inputmode="numeric" maxlength="8" value="${esc(logoutPin)}" placeholder="••••"></div>
+    ${logoutErr ? `<p class="note" style="color:var(--danger);margin:-8px 0 0">${esc(logoutErr)}</p>` : ""}
+    <p class="note">正しいパスワードを入れると、そのままログアウトします。</p>
+    <div class="sheet-acts"><button class="btn gh" data-closesheet="1">やめる</button></div>`);
+  setTimeout(()=>{ const i = document.getElementById("logoutPinInput"); if(i) i.focus(); }, 60);
+}
+
 function sheetAccount(){
   const a = acctOf(); if(!a) return;
   const r = ROLES[a.role];
@@ -1891,6 +1912,7 @@ function sheetAccount(){
     <div class="statenow"><span class="dot" style="background:var(--gold)"></span>${r.label}</div>
     <p class="note" style="margin:0 0 18px">${perms}</p>
     <button class="btn dan big wide" data-logout="1">ログアウト</button>
+    <p class="note" style="margin:8px 0 0">ログアウトにはパスワードが必要です。</p>
     <div class="sheet-acts"><button class="btn gh" data-closesheet="1">閉じる</button></div>`);
 }
 
@@ -2076,10 +2098,7 @@ document.addEventListener("click", e=>{
     commit(); return;
   }
   if(d.acct){ sheetAccount(); return; }
-  if(d.logout){
-    state.session = null; state.pin = ""; state.pinErr = "";
-    closeSheet(); commit(); return;
-  }
+  if(d.logout){ logoutPin = ""; logoutErr = ""; sheetLogout(); return; }
 
   if(d.tab){ state.tab = d.tab; state.filter="all"; render(); return; }
   if(d.filter){ state.filter = d.filter; render(); return; }
@@ -2309,7 +2328,24 @@ function commitSoft(){                     // 入力中は再描画せず配信�
 document.addEventListener("input", e=>{
   const t = e.target;
   if(t.dataset && (t.dataset.pname||t.dataset.pprice||t.dataset.tname||t.dataset.cname||
-     t.dataset.fee||t.dataset.pstocknum||t.dataset.catname||t.dataset.aname||t.dataset.apin||t.dataset.cust)) commitSoft();
+     t.dataset.fee||t.dataset.pstocknum||t.dataset.catname||t.dataset.aname||t.dataset.apin||
+     t.dataset.cust||t.dataset.logoutpw)) commitSoft();
+  if(t.dataset.logoutpin){
+    logoutPin = t.value.replace(/[^0-9]/g,"").slice(0,8);
+    t.value = logoutPin; logoutErr = "";
+    const want = String(state.logoutPin || "1234");
+    if(logoutPin.length >= want.length){
+      if(logoutPin === want){
+        logoutPin = ""; logoutErr = "";
+        state.session = null; state.pin = ""; state.pinErr = "";
+        closeSheet(); render();
+        return;
+      }
+      logoutErr = "パスワードが違います"; logoutPin = "";
+      sheetLogout();
+    }
+    return;
+  }
   if(t.dataset.devpin){
     devPin = t.value.replace(/[^0-9]/g,"").slice(0,4);
     t.value = devPin; devErr = "";
@@ -2355,6 +2391,10 @@ document.addEventListener("input", e=>{
     return;
   }
   if(t.dataset.aname){ const a=state.accounts.find(x=>x.id===t.dataset.aname); if(a) a.name=t.value; return; }
+  if(t.dataset.logoutpw !== undefined){
+    state.logoutPin = t.value.replace(/[^0-9]/g,"").slice(0,8);
+    t.value = state.logoutPin; return;
+  }
   if(t.dataset.syncurl !== undefined){ state.syncUrl = t.value; return; }     // 確定はblur(change)側で行う
   if(t.dataset.storecode !== undefined){ state.storeCode = t.value; return; } // 同上
   if(t.dataset.apin){
@@ -2497,7 +2537,7 @@ const CLIENT_ID = uid();
 /* cart（確定前のカート）は端末ごとのものなので同期しない。
    同期すると、確定してカートを空にした直後に他端末の古いカートが戻ってきてしまう。 */
 const SHARED = ["shopName","tables","casts","categories","products","accounts",
-                "orders","fees","rotations","defaultMin","idleSec","rev","billHistory"];
+                "orders","fees","rotations","defaultMin","idleSec","rev","billHistory","logoutPin"];
 
 const CLOUD = !!(typeof window !== "undefined" && window.storage &&
                typeof window.storage.get === "function");   // 端末をまたぐ同期が使えるか
