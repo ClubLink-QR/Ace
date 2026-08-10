@@ -1255,10 +1255,33 @@ function receiptBody(fees, orders, b, svcRate, taxRate){
     ? `<div class="bhead first">料金<span>${yen(fees.reduce((s,l)=>s+l.amount,0))}</span></div>
        ${fees.map(l=>row(l.name, l.amount, l.note)).join("")}` : "";
 
+  /* 同じ略称（無ければ商品名）はまとめて合算し、1行あたり最大10個までにして
+     10個を超えたら「S×10」「S×10」「S×3」のように行を分ける。
+     金額は最後の行で端数調整して合計がぴったり合うようにする。 */
   const orderSum = orders.reduce((s,l)=>s+l.price*l.qty, 0);
-  const orderRows = orders.length
+  const grouped = [];
+  const idx = {};
+  orders.forEach(l=>{
+    const key = l.abbr || l.name;
+    if(!(key in idx)){ idx[key] = grouped.length; grouped.push({ key, qty:0, amount:0 }); }
+    const g = grouped[idx[key]];
+    g.qty += l.qty; g.amount += l.price * l.qty;
+  });
+  const orderLines = [];
+  grouped.forEach(g=>{
+    if(g.qty <= 10){ orderLines.push({ label:g.key, qty:g.qty, amount:g.amount }); return; }
+    let remaining = g.qty, amountLeft = g.amount;
+    while(remaining > 0){
+      const chunkQty = Math.min(10, remaining);
+      remaining -= chunkQty;
+      const chunkAmount = remaining > 0 ? Math.round(g.amount * chunkQty / g.qty) : amountLeft;
+      amountLeft -= chunkAmount;
+      orderLines.push({ label:g.key, qty:chunkQty, amount:chunkAmount });
+    }
+  });
+  const orderRows = orderLines.length
     ? `<div class="bhead ${fees.length?"":"first"}">ご注文<span>${yen(orderSum)}</span></div>
-       ${orders.map(l=>row(l.abbr||l.name, l.price*l.qty, `${yen(l.price)} × ${l.qty}`)).join("")}` : "";
+       ${orderLines.map(l=>row(l.label, l.amount, `× ${l.qty}`)).join("")}` : "";
 
   return `<div class="slip">
       ${feeRows}${orderRows}
