@@ -810,7 +810,7 @@ const state = {
   shopName:"店舗管理",
   tables: Array.from({length:10}, (_,i)=>mkTable(i+1)),
   casts: ["キャストA","キャストB","キャストC","キャストD","キャストE","キャストF"]
-          .map(n=>({ id:uid(), name:n, active:true })),
+          .map((n,i)=>({ id:uid(), name:n, active:true, rank:i+1, first:true })),
   categories: SEED_CATS.slice(),
   products: SEED_PRODUCTS.map(([name,price,cat,stock])=>
     ({ id:uid(), name, price, cat, stock, track: cat==="ボトル・シャンパン" })),
@@ -1865,7 +1865,8 @@ function viewSettings(){
   const cst = `<div data-draglist="cast">${state.casts.map(c=>`<div class="setrow" data-did="${c.id}">
     <span class="dragh" data-drag="1">⠿</span>
     <input class="inp" value="${esc(c.name)}" data-cname="${c.id}" placeholder="キャスト名">
-    <input class="inp pri" type="number" inputmode="numeric" value="${c.priority||0}" data-cpriority="${c.id}" title="初回の優先順位（大きいほど先）">
+    <input class="inp pri" type="number" inputmode="numeric" value="${c.rank||0}" data-crank="${c.id}" title="初回の順番（数字が小さいほど先）">
+    <button class="tog" data-cfirst="${c.id}" aria-pressed="${c.first!==false}">${c.first!==false?"初回○":"初回×"}</button>
     <button class="tog" data-ctog="${c.id}" aria-pressed="${c.active}">${c.active?"出勤":"退勤"}</button>
     <button class="del" data-delcast="${c.id}" aria-label="削除">✕</button></div>`).join("")}</div>`;
 
@@ -2014,11 +2015,11 @@ function viewSettings(){
   ${sec("casts","キャスト", state.casts.filter(c=>c.active).length+"／"+state.casts.length+"人 出勤", `
     ${cst || `<div class="empty">キャストが登録されていません。</div>`}
     <button class="add" data-addcast="1" style="margin-top:8px">＋ キャストを追加</button>
-    <p class="note">出勤／退勤の左にある数字が「初回の優先順位」です。大きい人ほど初回で先に付き、小さい人ほど後に回ります。同じ数字でも構いません。</p>
+    <p class="note">名前の右の数字が「初回で回る順番」です。<b>小さい人ほど先</b>に、大きい人ほど後に回ります。同じ数字でも構いません。「初回○／初回×」は、そのキャストを初回のローテーションに入れるかどうかです（出勤中でも×にすれば外れます）。</p>
     <div class="sec-head"><h2>初回回しの既定値</h2><div class="rule"></div></div>
     <div class="stepper">
       <button data-dmin="-1">−</button>
-      <div class="val">${state.defaultMin}<small>分／組</small></div>
+      <div class="val">${state.defaultMin}<small>分／人（仮の表示）</small></div>
       <button data-dmin="1">＋</button>
     </div>
     <div class="stepper" style="margin-top:10px">
@@ -2026,7 +2027,7 @@ function viewSettings(){
       <div class="val">${state.firstVisitCapMin}<small>分が上限</small></div>
       <button data-capmin="5">＋</button>
     </div>
-    <p class="note">初回でつけられる合計時間の目安です。「1分／組」×これに収まるよう、順番と1組の時間を自動で組みます。</p>`)}
+    <p class="note">1組の時間は、来店人数（つけるキャスト数）と出勤中の人数から、上限（${state.firstVisitCapMin}分）に収まるよう自動で計算します（例：8人で1名ずつ→6分、15人で3名ずつ→10分）。上の「分／人」は、まだキャストを選べていないときの仮の表示にのみ使います。順番はキャストごとに設定した番号（小さいほど先）に沿います。</p>`)}
 
   ${sec("terminal","注文端末", state.idleSec+"秒", `
     <div class="stepper">
@@ -2148,7 +2149,7 @@ function sheetTable(id){
     extra = stepper + rotField;
     main  = `<button class="btn pri big wide" data-go="${t.id}:serving">接客開始</button>`;
   } else if(t.status === "serving"){
-    extra = nameField + stepper + castField + feeField + orderField + rotField;
+    extra = nameField + stepper + castField + feeField + orderField + (rotActive ? rotField : "");
     main  = `<button class="btn warn big wide" data-go="${t.id}:billing">会計</button>`;
     back  = `<button class="btn gh sm" data-go="${t.id}:empty">空席に戻す</button>`;
   } else if(t.status === "billing"){
@@ -2255,16 +2256,22 @@ function sheetAccount(){
 
 /* ---- new rotation draft ---- */
 let draft = null;
+
 /* ==========================================================
    初回回しの自動編成
-   ・キャストごとに手打ちで入れた「優先順位」の数字が大きいほど先に回す
-   ・今まさに他の卓の初回に付いているキャストは外す（同時刻の重複防止）
-   ・「初回は基本50分」に収まるよう、既定の1組の時間から組数を割り出す
-   ・全員の登場回数・合計時間がそろうよう、ひとまとまり（1周）単位で繰り返す
-   ・人数が奇数のときは、優先順位が一番小さい人が1周の最初と最後の両方に入る
+   ・キャストごとに手打ちで入れた「順番」の数字が小さいほど先に回す
+   ・「初回に付ける」がオフ、出勤していないキャストは対象から外す
+   ・今まさに他の卓の初回に付いているキャストは完全には外さず、
+     少しだけ後ろに回して時間がかぶりにくくする程度にとどめる
+   ・1組の時間は、来店人数（＝つけるキャスト数）に応じて自動で決める。
+     「全員に1周してもらうのに必要な組数」で50分の上限を割った値を使う
+     （つけるキャスト数が多いほど組数が減るので、1組の時間は長くなる）
+   ・人数が奇数のときは、順番の数字が一番小さい人が1周の最初と最後の両方に入る
+     （端数を吸収するための例外で、基本ルールは全員が同じ回数になること）
    ========================================================== */
 
-/* 今まさに別の卓の初回に付いている（現在の組で担当中の）キャストID一覧 */
+/* 今まさに別の卓の初回に付いている（現在の組で担当中の）キャストID一覧。
+   除外はせず、並び順を後ろにずらす材料としてだけ使う。 */
 function busyCastIds(excludeTableId){
   const busy = new Set();
   state.rotations.forEach(r=>{
@@ -2274,62 +2281,60 @@ function busyCastIds(excludeTableId){
   return busy;
 }
 
-/* 出勤中・他の初回とかぶっていないキャストを、手打ちの優先順位が大きい順に並べる */
+/* 出勤中・初回に付ける設定のキャストを、手打ちの番号が小さい順に並べる。
+   今まさに他の卓の初回に付いているキャストは除外せず、
+   「空いている人たちより後ろ」に回すだけにして、時間がかぶりにくくする。 */
 function rankedEligibleCasts(excludeTableId){
   const busy = busyCastIds(excludeTableId);
   return state.casts
-    .filter(c=>c.active && !busy.has(c.id))
-    .sort((a,b)=> (b.priority||0) - (a.priority||0) || a.name.localeCompare(b.name,"ja"))
+    .filter(c=>c.active && c.first!==false)
+    .sort((a,b)=>
+      (busy.has(a.id)?1:0) - (busy.has(b.id)?1:0) ||   // 空いている人を優先
+      (a.rank||0) - (b.rank||0) ||
+      a.name.localeCompare(b.name,"ja"))
     .map(c=>c.id);
 }
 
-/* 優先順位順のプールから「1周ぶん」の並びを作る。
-   人数が奇数のときは、一番優先順位が小さい人を先頭と末尾の両方に置く
-   （例：優先順位 大→小 が A,B,C なら 1周は C,A,B,C になる）。 */
+/* 番号順のプールから「1周ぶん」の並びを作る。
+   人数が奇数のときは、一番番号が小さい人を先頭と末尾の両方に置く
+   （例：番号 小→大 が A,B,C なら 1周は A,B,C,A になる）。 */
 function buildFirstCycle(pool){
   if(pool.length === 0) return [];
   if(pool.length % 2 === 0) return pool.slice();
-  const smallest = pool[pool.length - 1];
-  const middle = pool.slice(0, pool.length - 1);
-  return [smallest, ...middle, smallest];
+  const smallest = pool[0];
+  const rest = pool.slice(1);
+  return [smallest, ...rest, smallest];
 }
 
-/* 順番・1組の時間・組数をまとめて自動で組み立てる。
-   「1周」単位でしか繰り返さないことで、全員の登場回数をきっちり揃える
-   （奇数のときに最小優先順位の人が背負う「最初と最後」の2回ぶんも含めて、
-   周回のたびに同じ形が繰り返される）。 */
+/* 順番・1組の時間をまとめて自動で組み立てる。
+   1周（全員が1回ずつ付く）に必要な組数を、つけるキャスト数（＝来店人数）から
+   割り出し、50分の上限をその組数で割った値を「1組の時間」にする。
+   例：キャスト8人・1名ずつ付ける → 8組必要 → 50÷8＝6分／組
+       キャスト15人・3名ずつ付ける → 5組必要 → 50÷5＝10分／組 */
 function autoBuildOrder(){
   const d = draft; if(!d) return;
   const pool = rankedEligibleCasts(d.tableId);
   d.autoPool = pool.length;              // 画面表示用（何人から組んだか）
-  if(!pool.length){ d.order = []; d.minutes = state.defaultMin; return; }
+  if(!pool.length){ d.order = []; d.minutes = state.defaultMin; d.autoLaps = 0; return; }
 
   const cycle = buildFirstCycle(pool);
   const cycleLen = cycle.length;
-  const perRound = Math.max(1, d.perRound||1);
-  const cap = Math.max(perRound * 5, state.firstVisitCapMin || 50);
-  const baseMin = Math.max(1, state.defaultMin || 10);
+  const perRound = Math.max(1, d.perRound || d.guests || 1);
+  const cap = state.firstVisitCapMin || 50;
 
-  // 上限(cap)に収まる範囲で、1周を丸ごと繰り返せる回数（最低1周）を求める
-  let laps = 1;
-  while(true){
-    const nextRounds = Math.ceil((cycleLen * (laps+1)) / perRound);
-    if(nextRounds * baseMin > cap || laps >= 20) break;
-    laps++;
-  }
-  const need = laps * cycleLen;                        // 必ず1周ぶんの倍数＝端数なし
-  const totalRounds = Math.ceil(need / perRound);
-  d.minutes = Math.max(1, Math.floor(cap / totalRounds));   // その組数で50分にできるだけ近づける
+  const roundsPerLap = Math.max(1, Math.ceil(cycleLen / perRound));
+  d.minutes = Math.max(1, Math.floor(cap / roundsPerLap));   // 来店人数に応じて自動計算
 
+  const need = roundsPerLap * perRound;
   const order = [];
   for(let i=0; i<need; i++) order.push(cycle[i % cycleLen]);
   d.order = order;
-  d.autoLaps = laps;
+  d.autoLaps = 1;
 }
 
 function sheetNewRot(tableId){
   draft = {
-    tableId: tableId || (state.tables.find(t=>t.status==="empty")||state.tables[0]||{}).id || null,
+    tableId: tableId || (state.tables.find(t=>t.status==="empty")||{}).id || null,
     guests: 1, minutes: state.defaultMin, perRound: 1, order: [],
     firstFee: state.fees.firstHigh      // 初回料金
   };
@@ -2338,7 +2343,7 @@ function sheetNewRot(tableId){
 }
 function renderNewRot(){
   const d = draft;
-  const usable = state.tables.filter(t=>t.status==="empty" || t.status==="serving");
+  const usable = state.tables.filter(t=>t.status==="empty");
   if(!usable.some(t=>t.id===d.tableId)) d.tableId = usable.length ? usable[0].id : null;
   const opts = usable.map(t=>`<option value="${t.id}" ${t.id===d.tableId?"selected":""}>
       ${esc(t.name)}（${S[t.status].label}）</option>`).join("");
@@ -2382,7 +2387,7 @@ function renderNewRot(){
     <div class="field"><label>付ける順番</label>
       <div class="autobar">
         <span class="autotag">自動編成</span>
-        <span class="autotxt">優先順位が大きい順・かぶり無し</span>
+        <span class="autotxt">キャストの番号順・かぶり無し</span>
         <button class="btn sm gh" data-autorot="1">組み直す</button>
       </div>
       ${d.autoPool===0 ? `<p class="note" style="color:var(--danger)">今つけられるキャストがいません（全員退勤中、または他の初回に対応中です）。</p>` : ""}
@@ -2401,7 +2406,7 @@ function renderNewRot(){
 
 /* ========== events ========== */
 document.addEventListener("click", e=>{
-  const el = e.target.closest("[data-capmin],[data-autorot],[data-brange],[data-resetsales],[data-mcat],[data-newcode],[data-synctest],[data-btab],[data-obill],[data-receipt],[data-srange],[data-ptrack],[data-tcast],[data-persist],[data-firstoff],[data-dfee],[data-sec],[data-cat],[data-catadd],[data-catdel],[data-kdone],[data-kundo],[data-pstock],[data-feeon],[data-feetog],[data-idle],[data-okconfirm],[data-dev],[data-devclose],[data-devset],[data-tcancel],[data-tbus],[data-tstart],[data-thome],[data-ttab],[data-cadd],[data-cqty],[data-confirm],[data-cclear],[data-tbill],[data-key],[data-acct],[data-logout],[data-otab],[data-addacct],[data-adel],[data-tab],[data-filter],[data-table],[data-closesheet],[data-go],[data-guest],[data-new-rot],[data-order],[data-qty],[data-addprod],[data-pdel],[data-goto-rot],[data-next-rot],[data-pause-rot],[data-extend-rot],[data-close-rot],[data-restart-rot],[data-tcount],[data-tset],[data-dmin],[data-addcast],[data-delcast],[data-ctog],[data-deltable],[data-reset],[data-pick],[data-mv],[data-rm],[data-dguest],[data-dmin2],[data-dminset],[data-dper],[data-startrot]");
+  const el = e.target.closest("[data-cfmin],[data-cfminset],[data-cfback],[data-cfgo],[data-cfirst],[data-capmin],[data-autorot],[data-brange],[data-resetsales],[data-mcat],[data-newcode],[data-synctest],[data-btab],[data-obill],[data-receipt],[data-srange],[data-ptrack],[data-tcast],[data-persist],[data-firstoff],[data-dfee],[data-sec],[data-cat],[data-catadd],[data-catdel],[data-kdone],[data-kundo],[data-pstock],[data-feeon],[data-feetog],[data-idle],[data-okconfirm],[data-dev],[data-devclose],[data-devset],[data-tcancel],[data-tbus],[data-tstart],[data-thome],[data-ttab],[data-cadd],[data-cqty],[data-confirm],[data-cclear],[data-tbill],[data-key],[data-acct],[data-logout],[data-otab],[data-addacct],[data-adel],[data-tab],[data-filter],[data-table],[data-closesheet],[data-go],[data-guest],[data-new-rot],[data-order],[data-qty],[data-addprod],[data-pdel],[data-goto-rot],[data-next-rot],[data-pause-rot],[data-extend-rot],[data-close-rot],[data-restart-rot],[data-tcount],[data-tset],[data-dmin],[data-addcast],[data-delcast],[data-ctog],[data-deltable],[data-reset],[data-pick],[data-mv],[data-rm],[data-dguest],[data-dmin2],[data-dminset],[data-dper],[data-startrot]");
   if(!el){
     if(e.target.dataset && e.target.dataset.sheet) closeSheet();
     return;
@@ -2669,24 +2674,33 @@ document.addEventListener("click", e=>{
   if(d.rm){ draft.order.splice(Number(d.rm),1); renderNewRot(); return; }
   if(d.dguest){
     draft.guests = Math.max(1, Math.min(12, draft.guests + Number(d.dguest)));
-    draft.perRound = Math.max(1, Math.min(draft.guests, draft.perRound));
-    renderNewRot(); return;
+    draft.perRound = draft.guests;      // 基本は来店人数＝つけるキャスト数（あとで個別に変更も可）
+    autoBuildOrder(); renderNewRot(); return;
   }
   if(d.dmin2){ draft.minutes = Math.max(1, Math.min(60, draft.minutes + Number(d.dmin2))); renderNewRot(); return; }
   if(d.dminset){ draft.minutes = Number(d.dminset); renderNewRot(); return; }
   if(d.dfee !== undefined){ draft.firstFee = Number(d.dfee); renderNewRot(); return; }
   if(d.dper){ draft.perRound = Math.max(1, Math.min(6, draft.perRound + Number(d.dper))); autoBuildOrder(); renderNewRot(); return; }
   if(d.autorot){ autoBuildOrder(); renderNewRot(); return; }
-  if(d.startrot){ startRotation(); return; }
+  if(d.startrot){ sheetConfirmStart(); return; }
+  if(d.cfmin){ draft.minutes = Math.max(1, Math.min(60, draft.minutes + Number(d.cfmin))); sheetConfirmStart(); return; }
+  if(d.cfminset){ draft.minutes = Number(d.cfminset); sheetConfirmStart(); return; }
+  if(d.cfback){ renderNewRot(); return; }
+  if(d.cfgo){ startRotation(); return; }
 
   /* settings */
   if(d.tcount){ changeTableCount(state.tables.length + Number(d.tcount)); return; }
   if(d.tset){ changeTableCount(Number(d.tset)); return; }
-  if(d.dmin){ state.defaultMin = Math.max(1, Math.min(60, state.defaultMin + Number(d.dmin))); commit(); return; }
+  if(d.dmin){ state.defaultMin = Math.max(1, Math.min(30, state.defaultMin + Number(d.dmin))); commit(); return; }
   if(d.capmin){ state.firstVisitCapMin = Math.max(10, Math.min(180, state.firstVisitCapMin + Number(d.capmin))); commit(); return; }
-  if(d.addcast){ state.casts.push({id:uid(), name:`キャスト${state.casts.length+1}`, active:true}); commit(); return; }
+  if(d.addcast){
+    const rank = state.casts.reduce((m,c)=>Math.max(m, c.rank||0), 0) + 1;
+    state.casts.push({id:uid(), name:`キャスト${state.casts.length+1}`, active:true, rank, first:true});
+    commit(); return;
+  }
   if(d.delcast){ state.casts = state.casts.filter(c=>c.id!==d.delcast); commit(); return; }
   if(d.ctog){ const c = state.casts.find(x=>x.id===d.ctog); c.active = !c.active; commit(); return; }
+  if(d.cfirst){ const c = state.casts.find(x=>x.id===d.cfirst); c.first = !c.first; commit(); return; }
   if(d.deltable){
     const t = tableOf(d.deltable);
     if(t.status!=="empty"){ toast("使用中の卓は削除できません"); return; }
@@ -2726,7 +2740,7 @@ function commitSoft(){                     // 入力中は再描画せず配信�
 }
 document.addEventListener("input", e=>{
   const t = e.target;
-  if(t.dataset && (t.dataset.pname||t.dataset.pprice||t.dataset.pabbr||t.dataset.tname||t.dataset.cname||t.dataset.cpriority||
+  if(t.dataset && (t.dataset.pname||t.dataset.pprice||t.dataset.pabbr||t.dataset.tname||t.dataset.cname||t.dataset.crank||
      t.dataset.fee||t.dataset.pstocknum||t.dataset.catname||t.dataset.aname||t.dataset.apin||
      t.dataset.cust||t.dataset.logoutpw)) commitSoft();
   if(t.dataset.logoutpin){
@@ -2764,9 +2778,9 @@ document.addEventListener("input", e=>{
     return;
   }
   if(t.dataset.cname){ const c=state.casts.find(x=>x.id===t.dataset.cname); if(c) c.name=t.value; return; }
-  if(t.dataset.cpriority){
-    const c=state.casts.find(x=>x.id===t.dataset.cpriority);
-    if(c) c.priority = parseInt(t.value,10) || 0;
+  if(t.dataset.crank){
+    const c=state.casts.find(x=>x.id===t.dataset.crank);
+    if(c) c.rank = parseInt(t.value,10) || 0;
     return;
   }
   if(t.dataset.pname){ const p=prodOf(t.dataset.pname); if(p) p.name=t.value; return; }
@@ -2909,6 +2923,36 @@ function changeTableCount(n){
     }
   }
   render();
+}
+
+/* 「開始する」を押すと、まずこの確認シートを挟む。
+   ここで時間を確認・調整してから、実際にstartRotation()を呼ぶ。 */
+function sheetConfirmStart(){
+  const d = draft; if(!d) return;
+  const t = tableOf(d.tableId);
+  const nR = Math.ceil(d.order.length / d.perRound) || 0;
+  const totalMin = nR * d.minutes;
+
+  openSheet(`<h3>この時間で回しますか？<small>${t?esc(t.name)+"卓":""}</small></h3>
+    <div class="field"><label>1組あたりの時間</label>
+      <div class="stepper">
+        <button data-cfmin="-1">−</button>
+        <div class="val">${d.minutes}<small>分</small></div>
+        <button data-cfmin="1">＋</button>
+      </div>
+      <div class="quick" style="margin-top:8px">
+        ${[5,6,8,10,12,15].map(n=>`<button data-cfminset="${n}" aria-pressed="${d.minutes===n}">${n}分</button>`).join("")}
+      </div></div>
+
+    <p class="round-hint">全 <b>${nR}組</b> ／ 1組 <b>${d.minutes}分</b> ／ 合計 <b>${totalMin}分</b>
+      （${hhmm(Date.now())} 開始 → ${hhmm(Date.now()+totalMin*60000)} 終了予定）</p>
+    ${totalMin > (state.firstVisitCapMin||50)
+      ? `<p class="note" style="color:var(--danger)">上限（${state.firstVisitCapMin}分）を超えています。</p>` : ""}
+
+    <div class="sheet-acts">
+      <button class="btn gh" data-cfback="1">戻る</button>
+      <button class="btn pri" data-cfgo="1">この時間で開始する</button>
+    </div>`);
 }
 
 function startRotation(){
