@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>店舗管理</title>
 <style>
@@ -24,15 +24,20 @@
   --font:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",Meiryo,sans-serif;
   --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 }
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;                 /* 連打してもダブルタップ拡大が起きないように */
+  -webkit-touch-callout:none}
+button,.mrow,.card,.tchip,.pcard,.tcard,.mfil,.grph,.secth{
+  -webkit-user-select:none;user-select:none} /* 連打時に文字が選択されるのを防ぐ */
 html,body{margin:0;padding:0}
 body{
+  overflow-x:hidden;                         /* 端が切れて見えなくなるのを防ぐ */
   background:var(--bg);color:var(--text);font-family:var(--font);
   font-size:15px;line-height:1.5;
   padding-bottom:calc(72px + env(safe-area-inset-bottom));
   -webkit-text-size-adjust:100%;
 }
-@media(min-width:760px){body{padding-bottom:24px}}
+@media(min-width:600px){body{padding-bottom:24px}}
 button,input,select,textarea{font-family:inherit;font-size:inherit;color:var(--text)}
 select{-webkit-appearance:none;appearance:none;background-image:none}
 select,option,optgroup{background-color:#1D2230;color:#E8EBF1}
@@ -52,11 +57,11 @@ button{cursor:pointer;border:0;background:none}
   max-width:1280px;margin:0 auto;padding:8px 14px;min-height:52px;
   display:flex;align-items:center;gap:10px;
 }
-@media(min-width:760px){.topbar-in{min-height:58px}}
-.brand{display:flex;align-items:baseline;gap:8px;min-width:0}
+@media(min-width:600px){.topbar-in{min-height:52px}}
+.brand{display:flex;align-items:baseline;gap:8px;min-width:0;flex:1 1 auto;overflow:hidden}
 .brand b{font-size:15px;font-weight:700;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .brand span{font-size:11px;color:var(--muted);letter-spacing:.14em}
-.clock{margin-left:auto;font-family:var(--mono);font-size:15px;color:var(--gold);font-variant-numeric:tabular-nums}
+.clock{margin-left:auto;flex:0 0 auto;font-family:var(--mono);font-size:15px;color:var(--gold);font-variant-numeric:tabular-nums}
 .acct{display:flex;align-items:center;gap:7px;padding:4px 10px 4px 4px;border-radius:999px;
   background:var(--surface2);border:1px solid var(--line);flex:0 0 auto}
 .acct .av{width:26px;height:26px;border-radius:50%;background:var(--gold);color:#14171E;
@@ -66,29 +71,67 @@ button{cursor:pointer;border:0;background:none}
 .syncdot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;margin-left:2px}
 .syncdot.on{background:var(--st-serving)}
 .syncdot.off{background:var(--st-empty)}
-@media(max-width:539px){.acct .an{display:none}.acct{padding:4px}}
+@media(max-width:679px){
+  .clock{display:none}                       /* 時計を隠してアカウント表示を確保 */
+  .acct .an{max-width:64px}
+}
+.acct{min-height:44px;flex:0 0 auto}         /* 押しやすさを確保しつつ、絶対に縮ませない */
 
 /* ---------- tabs ---------- */
+/* スマホ縦：タブは画面下に固定（親指で届く位置） */
 .tabs{
   position:fixed;left:0;right:0;bottom:0;z-index:40;
-  display:flex;gap:4px;padding:8px 12px calc(8px + env(safe-area-inset-bottom));
+  display:flex;gap:4px;padding:8px 10px calc(8px + env(safe-area-inset-bottom));
   background:rgba(16,19,25,.96);border-top:1px solid var(--line);backdrop-filter:blur(10px);
+  overflow-x:auto;-webkit-overflow-scrolling:touch;
 }
-.tabs{overflow-x:auto;-webkit-overflow-scrolling:touch}
 .tabs::-webkit-scrollbar{height:0}
 .tabs button{
-  flex:1 0 auto;min-width:58px;padding:11px 8px;border-radius:10px;font-size:12.5px;font-weight:600;
+  flex:1 0 auto;min-width:52px;padding:10px 6px;border-radius:10px;font-size:12px;font-weight:600;
   color:var(--muted);background:transparent;transition:background .15s,color .15s;
 }
 .tabs button[aria-selected="true"]{background:var(--surface2);color:var(--gold)}
-@media(min-width:760px){
-  .tabs{position:static;background:none;border:0;padding:0;backdrop-filter:none;
-    gap:2px;flex:0 0 auto;background:var(--surface2);border-radius:11px;padding:3px}
-  .tabs button{flex:0 0 auto;padding:7px 18px;font-size:13px}
+/* タブレット・PC：タブはヘッダーの2段目に置く。
+   1段目（店名・アカウント）とは別行なので、タブが増えても
+   ログアウトボタンが押し出されることがない。 */
+@media(min-width:600px){
+  .tabs{position:static;border-top:0;backdrop-filter:none;background:none;
+    max-width:1280px;margin:0 auto;padding:0 14px 8px;gap:4px}
+  .tabs button{flex:0 0 auto;min-width:0;padding:8px 16px;font-size:13px;
+    background:var(--surface2)}
+  .tabs button[aria-selected="true"]{background:var(--surface2);color:var(--gold);
+    box-shadow:inset 0 0 0 1px rgba(215,178,109,.45)}
+}
+@media(min-width:1100px){
+  .tabs button{padding:9px 22px;font-size:13.5px}
+}
+/* スマホ横向き：縦の余白が少ないのでヘッダーを詰める */
+@media(orientation:landscape) and (max-height:520px){
+  .topbar-in{min-height:38px;padding:4px 12px}
+  .tabs{padding:0 12px 5px}
+  .tabs button{padding:6px 13px;font-size:12px}
+  .brand b{font-size:13px}
+  .acct{min-height:34px}
+  .acct .av{width:22px;height:22px;font-size:10.5px}
 }
 
-/* ---------- layout ---------- */
+/* ---------- layout ----------
+   スマホ縦 → スマホ横 → タブレット → PC の順に情報量を増やす。
+   基準はタブレット（横）。 */
 main{max-width:1280px;margin:0 auto;padding:14px}
+
+/* タブレット横：卓を広めに、伝票は2カラム */
+@media(min-width:900px){
+  main{padding:16px 20px}
+}
+/* PC：さらに広く使い、一覧の列数を増やす */
+@media(min-width:1280px){
+  main{padding:20px 28px}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
+  .pgrid{grid-template-columns:repeat(auto-fill,minmax(168px,1fr))}
+  .card{min-height:130px}
+  .card .name{font-size:23px}
+}
 .sec-head{display:flex;align-items:center;gap:10px;margin:22px 0 10px}
 .sec-head:first-child{margin-top:4px}
 .sec-head h2{margin:0;font-size:12px;font-weight:700;letter-spacing:.16em;color:var(--muted)}
@@ -264,8 +307,7 @@ main{max-width:1280px;margin:0 auto;padding:14px}
 .note{font-size:12px;color:var(--muted);line-height:1.7;margin:8px 0 0}
 
 /* ---------- login ---------- */
-:root{--tb:53px}
-@media(min-width:760px){:root{--tb:59px}}
+:root{--tb:96px}   /* 起動直後の暫定値。実際の高さは fitTopbar() が測って上書きする */
 body.login{padding:0}
 body.login .topbar{display:none}
 body.login main{max-width:none;padding:0}
@@ -329,7 +371,7 @@ body.login main{max-width:none;padding:0}
 .slip{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 13px}
 .srow{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
 .srow:last-of-type{border-bottom:0}
-.sn{flex:1;min-width:0;font-size:13.5px;line-height:1.35}
+.sn{flex:1;min-width:0;font-size:13.5px;line-height:1.35;overflow-wrap:anywhere}
 .sn span{display:block;font-family:var(--mono);font-size:11px;color:var(--muted)}
 .sqc{display:flex;align-items:center;gap:4px;flex:0 0 auto}
 .sqc button{width:29px;height:29px;border-radius:7px;background:var(--surface2);border:1px solid var(--line);
@@ -406,7 +448,7 @@ body.login main{max-width:none;padding:0}
   letter-spacing:.1em;color:var(--muted);font-weight:700}
 .hbatch .hh .amt{margin-left:auto;font-family:var(--mono);color:var(--gold);font-size:13px;letter-spacing:0}
 .hline{display:flex;gap:8px;font-size:13.5px;padding:3px 0}
-.hline .n{flex:1;min-width:0}
+.hline .n{flex:1;min-width:0;overflow-wrap:anywhere}
 .hline .q{font-family:var(--mono);color:var(--muted)}
 .hline .a{width:74px;text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
 
@@ -464,8 +506,14 @@ body.login main{max-width:none;padding:0}
 .nbadge.live{animation:badge 1.6s ease-in-out infinite}
 
 /* ---------- 縦型メニュー ---------- */
+.mcats{display:flex;gap:7px;overflow-x:auto;-webkit-overflow-scrolling:touch;
+  padding:2px 0 10px;position:sticky;top:var(--tb);z-index:12;background:var(--bg)}
+.mcats::-webkit-scrollbar{height:0}
+.mfil{flex:0 0 auto;padding:9px 15px;border-radius:999px;background:var(--surface);
+  border:1px solid var(--line);font-size:13px;font-weight:600;color:var(--muted);white-space:nowrap}
+.mfil[aria-pressed="true"]{border-color:var(--gold);color:var(--gold);background:var(--surface2)}
 .mlist{border-top:1px solid var(--line)}
-.mcat{position:sticky;top:var(--tb);z-index:10;background:var(--bg);
+.mcat{position:sticky;top:calc(var(--tb) + 44px);z-index:10;background:var(--bg);
   font-size:10.5px;letter-spacing:.16em;font-weight:700;color:var(--gold);
   padding:12px 2px 7px;border-bottom:1px solid var(--line)}
 .mrow{display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);
@@ -473,7 +521,7 @@ body.login main{max-width:none;padding:0}
 .mrow.on{background:rgba(215,178,109,.07);box-shadow:inset 3px 0 0 var(--gold)}
 .mrow.sold{opacity:.42}
 .mtap{flex:1;min-width:0;display:flex;align-items:center;gap:12px;padding:15px 10px 15px 12px;text-align:left}
-.mn{flex:1;min-width:0;font-size:15px;font-weight:600;line-height:1.35}
+.mn{flex:1;min-width:0;font-size:15px;font-weight:600;line-height:1.35;overflow-wrap:anywhere}
 .mn em{font-style:normal;margin-left:8px;font-size:10.5px;font-weight:700;color:var(--danger);
   border:1px solid rgba(214,95,78,.4);border-radius:5px;padding:2px 6px;vertical-align:2px}
 .mp{font-family:var(--mono);font-size:14px;color:var(--muted);font-variant-numeric:tabular-nums;flex:0 0 auto}
@@ -484,6 +532,33 @@ body.login main{max-width:none;padding:0}
 .mq span{min-width:26px;text-align:center;font-family:var(--mono);font-size:15px;font-weight:700}
 
 /* ---------- 開閉セクション（▼で増やす／▲で減らす） ---------- */
+.bigsync{border-radius:var(--r);padding:14px 15px;border:1px solid var(--line);background:var(--surface)}
+.bigsync .bs-t{font-size:15.5px;font-weight:700;color:var(--muted)}
+.bigsync .bs-m{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.6}
+.bigsync.on{border-color:rgba(62,168,123,.5);background:linear-gradient(180deg,rgba(62,168,123,.12),transparent 70%),var(--surface)}
+.bigsync.on .bs-t{color:var(--st-serving)}
+.bigsync.ng{border-color:rgba(214,95,78,.5);background:linear-gradient(180deg,rgba(214,95,78,.10),transparent 70%),var(--surface)}
+.bigsync.ng .bs-t{color:var(--danger)}
+.dragh{flex:0 0 auto;padding:8px 9px;margin:-4px 0;color:var(--muted);font-size:17px;
+  cursor:grab;touch-action:none;-webkit-user-select:none;user-select:none;line-height:1}
+.dragh:active{cursor:grabbing;color:var(--gold)}
+/* つかんでいる行：持ち上がって見えるようにする。並び直り自体は insertBefore で
+   即座に起きるので、まわりの行は JS 側で FLIP アニメーションを掛けて滑らかに追従させる */
+.prow,.setrow{transition:transform .16s ease,box-shadow .16s ease}
+.prow.dragging,.setrow.dragging{
+  position:relative;z-index:30;background:var(--surface2);
+  box-shadow:0 14px 30px rgba(0,0,0,.5),0 0 0 1px rgba(215,178,109,.5);
+  transform:scale(1.025);
+}
+.dragh.pulse{animation:handlePulse .5s ease}
+@keyframes handlePulse{0%{color:var(--gold);transform:scale(1.3)}100%{color:var(--muted);transform:scale(1)}}
+.drag-ghost{position:fixed;left:0;top:0;z-index:200;pointer-events:none;
+  background:var(--surface2);border:1px solid var(--gold);border-radius:10px;
+  padding:10px 12px;font-size:14px;font-weight:600;box-shadow:0 10px 26px rgba(0,0,0,.5);
+  display:flex;align-items:center;gap:8px;opacity:.96}
+.drag-slot{border-radius:9px;background:rgba(215,178,109,.14);
+  border:1px dashed rgba(215,178,109,.5);margin:2px 0}
+
 .errbox{background:rgba(214,95,78,.10);border:1px solid rgba(214,95,78,.35);border-radius:10px;
   padding:11px 13px;margin-top:9px;font-size:12px;line-height:1.75;color:var(--text)}
 .errbox b{display:block;color:var(--danger);font-size:11.5px;letter-spacing:.06em;margin-bottom:4px}
@@ -502,8 +577,12 @@ body.login main{max-width:none;padding:0}
   padding:10px 0;border-bottom:1px solid var(--line);font-size:13.5px}
 .ctr:last-child{border-bottom:0}
 .ctr.ch{font-size:10.5px;letter-spacing:.08em;color:var(--muted);font-weight:700;padding:9px 0 8px}
-.ctr span:not(:first-child){text-align:center;font-family:var(--mono)}
+.ctr span{min-width:0;overflow-wrap:anywhere}
+.ctr span:not(:first-child){text-align:center;font-family:var(--mono);overflow-wrap:normal}
 .ctr .amt{text-align:right;color:var(--gold);font-weight:700}
+.ctr.zero{opacity:.55}
+.ctr .off{margin-left:6px;font-style:normal;font-size:10px;color:var(--muted);
+  border:1px solid var(--line);border-radius:5px;padding:1px 5px;vertical-align:1px}
 
 .sect{border-bottom:1px solid var(--line)}
 .secth{width:100%;display:flex;align-items:center;gap:10px;padding:15px 3px;text-align:left}
@@ -573,10 +652,71 @@ body.login main{max-width:none;padding:0}
 .prow-b .sq{width:30px;height:30px;border-radius:7px;background:var(--surface2);border:1px solid var(--line);
   display:grid;place-items:center;font-size:15px;color:var(--text);flex:0 0 auto}
 
+/* ---------- スマートフォン幅への対応（タブレットの表示は変えない） ---------- */
+@media(max-width:480px){
+  main{padding:12px 10px}
+  .topbar-in{padding:6px 10px;gap:8px;min-height:48px}
+  .acct{min-height:40px;padding:3px 8px 3px 3px}
+  .acct .av{width:24px;height:24px;font-size:11px}
+  .acct .an{max-width:58px;font-size:11.5px}
+  .brand b{font-size:13.5px}
+
+  .tabs{padding:6px 8px calc(6px + env(safe-area-inset-bottom))}
+  .tabs button{min-width:50px;padding:9px 5px;font-size:11.5px}
+
+  .grid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+  .card{min-height:104px;padding:10px 10px 9px}
+  .card .name{font-size:19px}
+  .card .meta{font-size:11px}
+  .summary{gap:6px}
+  .chip{padding:6px 10px;font-size:11.5px}
+
+  .sect .secth{padding:14px 2px}
+  .secth .stt{font-size:13.5px}
+  .prow{padding:8px}
+  .prow .nm{flex:1 1 100%;min-width:0}
+  .prow-b{flex-wrap:wrap;justify-content:flex-end;gap:5px}
+  .prow .rl{width:88px;font-size:12px;padding:6px}
+  .prow .pr{width:74px;font-size:13px}
+  .prow .flab{flex:1 1 100%;font-size:13px}
+  .setrow{padding:7px 8px}
+
+  .slip{padding:10px}
+  .sn{font-size:12.5px}
+  .ss{width:64px;font-size:12.5px}
+  .stotal b{font-size:19px}
+  .gtotal b{font-size:20px}
+
+  .orderbar{margin:0 -10px 12px;padding:9px 10px}
+  .obt{font-size:17px}
+  .obtotal{font-size:17px}
+
+  .mtap{padding:13px 8px 13px 10px}
+  .mn{font-size:14px}
+  .mp{font-size:13px}
+  .mq button{width:32px;height:32px}
+  .mfil{padding:8px 13px;font-size:12.5px}
+
+  .ctr{grid-template-columns:1.3fr .55fr .55fr .55fr 1fr;gap:4px;font-size:12px}
+  .ctr.ch{font-size:9.5px}
+  .daterow .inp{flex:1 1 100%}
+
+  .rot{padding:12px}
+  .rot-cast .nm{font-size:clamp(21px,6.4vw,32px)}
+  .rot-time .tm{font-size:clamp(21px,6.4vw,32px)}
+
+  .keypad button{height:52px;font-size:20px}
+  .login-card{max-width:290px}
+  .panel{padding:16px 12px calc(18px + env(safe-area-inset-bottom))}
+  .term-head{gap:8px}
+  .th-no{font-size:19px}
+  .korder{padding:11px 12px}
+}
+
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom));
   background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:10px 16px;
   font-size:13px;z-index:80;box-shadow:0 8px 24px rgba(0,0,0,.5);animation:toastIn .18s ease-out}
-@media(min-width:760px){.toast{bottom:24px}}
+@media(min-width:600px){.toast{bottom:24px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -585,10 +725,10 @@ body.login main{max-width:none;padding:0}
 <header class="topbar">
   <div class="topbar-in">
     <div class="brand"><b id="shopName">店舗管理</b></div>
-    <nav class="tabs" id="tabs" role="tablist"></nav>
     <div class="clock" id="clock">--:--</div>
     <button class="acct" id="acct" data-acct="1"></button>
   </div>
+  <nav class="tabs" id="tabs" role="tablist"></nav>
 </header>
 
 <main id="view"></main>
@@ -658,6 +798,7 @@ const state = {
     service:10, serviceOn:true,   // サービス料（％）
     tax:10,     taxOn:true        // 消費税（％）
   },
+  logoutPin: "1234",   // ログアウトに必要なパスワード
   idleSec: 60,         // 注文端末が待機画面に戻るまでの無操作時間
   openCats: {},        // 商品・在庫で開いているジャンル
   openSecs: {},        // 設定で開いているセクション
@@ -674,7 +815,7 @@ const state = {
   filter:"all",
   orderTable:null,     // 注文タブ（ホール・管理者）で選択中の卓
   deviceTable:null,    // この端末に固定された卓（歯車＋管理者PINで設定）
-  term:{ stage:"idle", tab:"menu" }   // 注文端末の画面状態
+  term:{ stage:"idle", tab:"menu", cat:"*" }   // 注文端末の画面状態
 };
 
 /* ========== helpers ========== */
@@ -891,10 +1032,11 @@ function render(){
   $("#tabs").style.display = tabs.length > 1 ? "" : "none";
 
   const a = acctOf();
+  const linked = syncState.ok === true;
+  $("#acct").setAttribute("aria-label", `${a.name}（${ROLES[a.role].label}）／ログアウト`);
   $("#acct").innerHTML = `<span class="av">${esc((a.name||"?").slice(0,1))}</span>
     <span class="an">${esc(a.name)}<small>${ROLES[a.role].label}</small></span>
-    <span class="syncdot ${typeof CLOUD!=="undefined"&&CLOUD?"on":"off"}" title="${
-      typeof CLOUD!=="undefined"&&CLOUD?"他端末と連携中":"この端末のみ（連携なし）"}"></span>`;
+    <span class="syncdot ${linked?"on":"off"}" title="${linked?"他端末と連携中":"この端末のみ"}"></span>`;
 
   if(state.orderTable && !tableOf(state.orderTable)) state.orderTable = null;
   const isTerm = roleOf() === "order";
@@ -911,6 +1053,8 @@ function render(){
   lastRev = state.rev;
 
   /* 固定フッターぶんの余白を実寸で確保 */
+  fitTopbar();
+  wireDrag();
   const foot = document.querySelector(".termfoot");
   document.body.style.paddingBottom = foot ? (foot.offsetHeight + 18) + "px" : "";
   tick();
@@ -1166,19 +1310,28 @@ function billsInRange(fromStr, toStr){
   const to   = toStr   ? new Date(toStr   + "T23:59:59").getTime() :  Infinity;
   return state.billHistory.filter(b => b.at >= from && b.at <= to);
 }
+/* 集計に使う金額は「サービス料・消費税を含まない」もの。
+   ＝ SET料金（または初回料金）＋ 指名料 ＋ 同伴料 ＋ 商品（ドリンク等）の合計。
+   billHistory の b.sub がこれに当たる（bill() 内で svc・tax を足す前の値）。 */
+const netOf = b => (b.sub != null ? b.sub : b.total);
+
 function castStats(bills){
   const map = {};
+  /* 在籍しているキャストは、その期間に売上が無くても全員載せる（0円のまま一覧に出す） */
+  state.casts.forEach(c=>{ map[c.name] = { name:c.name, count:0, nom:0, douhan:0, total:0, active:c.active }; });
+
   bills.forEach(b=>{
     (b.casts.length ? b.casts : ["（担当なし）"]).forEach(name=>{
-      if(!map[name]) map[name] = { name, count:0, nom:0, douhan:0, total:0 };
+      if(!map[name]) map[name] = { name, count:0, nom:0, douhan:0, total:0, active:true };
       const m = map[name];
       m.count++;
       if(b.nom) m.nom++;
       if(b.douhan) m.douhan++;
-      m.total += b.total;
+      m.total += netOf(b);
     });
   });
-  return Object.values(map).sort((a,b)=>b.total-a.total);
+  // 金額の高い順。同額なら本数が多い方を上に、それも同じなら名前順で安定させる
+  return Object.values(map).sort((a,b)=> b.total - a.total || b.count - a.count || a.name.localeCompare(b.name,"ja"));
 }
 function todayStr(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
 
@@ -1186,7 +1339,7 @@ function viewSales(){
   if(!state.salesRange) state.salesRange = { from: todayStr(), to: todayStr() };
   const rg = state.salesRange;
   const bills = billsInRange(rg.from, rg.to).sort((a,b)=>b.at-a.at);
-  const grand = bills.reduce((s,b)=>s+b.total, 0);
+  const grand = bills.reduce((s,b)=>s+netOf(b), 0);   // サービス料・消費税を含まない総売上
   const nomCount = bills.filter(b=>b.nom).length, douhanCount = bills.filter(b=>b.douhan).length;
   const cs = castStats(bills);
 
@@ -1203,7 +1356,8 @@ function viewSales(){
       </div>
     </div>
 
-    <div class="gtotal"><span>総計（${bills.length}組）</span><b>${yen(grand)}</b></div>
+    <div class="gtotal"><span>総売上（${bills.length}組）</span><b>${yen(grand)}</b></div>
+    <p class="note" style="margin:-8px 0 12px">サービス料・消費税を含まない金額です（SET・指名料・同伴料・商品の合計）。</p>
     <div class="summary" style="margin:-2px 0 14px">
       <span class="chip"><span class="n">${nomCount}</span>本 指名</span>
       <span class="chip"><span class="n">${douhanCount}</span>本 同伴</span>
@@ -1213,16 +1367,16 @@ function viewSales(){
     <div class="sec-head"><h2>キャスト別</h2><div class="rule"></div></div>
     ${cs.length ? `<div class="castable">
         <div class="ctr ch"><span>キャスト</span><span>本数</span><span>指名</span><span>同伴</span><span>小計</span></div>
-        ${cs.map(c=>`<div class="ctr">
-          <span>${esc(c.name)}</span><span>${c.count}</span>
+        ${cs.map(c=>`<div class="ctr ${c.total===0?"zero":""}">
+          <span>${esc(c.name)}${c.active===false?`<i class="off">退勤</i>`:""}</span><span>${c.count||"—"}</span>
           <span>${c.nom||"—"}</span><span>${c.douhan||"—"}</span>
           <span class="amt">${yen(c.total)}</span></div>`).join("")}
-      </div>` : `<div class="empty">この期間の会計データがありません。</div>`}
+      </div>` : `<div class="empty">キャストが登録されていません。</div>`}
 
     <div class="sec-head"><h2>会計履歴</h2><div class="rule"></div></div>
     ${bills.length ? bills.map(b=>`<div class="hbatch">
         <div class="hh">${new Date(b.at).toLocaleDateString("ja-JP")} ${hhmm(b.at)}　${esc(b.tableName)}${
-          b.customerName?`　${esc(b.customerName)} 様`:""}<span class="amt">${yen(b.total)}</span></div>
+          b.customerName?`　${esc(b.customerName)} 様`:""}<span class="amt">${yen(netOf(b))}</span></div>
         <div class="hline"><span class="n">${b.guests}名${b.isFirst?"・初回":""}${b.nom?"・指名":""}${b.douhan?"・同伴":""}${
           b.casts.length?"・"+esc(b.casts.join("／")):""}</span></div>
       </div>`).join("") : `<div class="empty">まだ会計はありません。</div>`}`;
@@ -1357,7 +1511,7 @@ function viewTerminal(){
   if(state.term.stage === "idle"){
     return gear + `<button class="term-idle" data-tstart="1"><div>
         <div class="ti-lb">TABLE</div><div class="ti-no">${esc(t.name)}</div>
-        <div class="ti-cta live">タップで注文を開始する</div>
+        <div class="ti-cta live">${t.status==="empty" ? "タップしてご案内を開始" : "タップで注文する"}</div>
         ${t.status==="serving" ? `<div class="ti-note">${hhmm(t.seatedAt)} 入店 ・ 現在の合計 <b>${yen(tot)}</b>${
           isFreeTime(t)?" ・ フリータイム":""}</div>` : ""}
       </div></button>`;
@@ -1372,10 +1526,16 @@ function viewTerminal(){
 
   let body = "";
   if(state.term.tab === "menu"){
-    const gs = prodGroups();
-    body = gs.length
+    const all = prodGroups();
+    const cur = state.term.cat || "*";
+    const filter = `<div class="mcats">
+        <button class="mfil" data-mcat="*" aria-pressed="${cur==="*"}">すべて</button>
+        ${all.map(([c])=>`<button class="mfil" data-mcat="${esc(c)}" aria-pressed="${cur===c}">${esc(c)}</button>`).join("")}
+      </div>`;
+    const gs = cur === "*" ? all : all.filter(([c])=>c===cur);
+    body = filter + (gs.length
       ? `<div class="mlist">${gs.map(([c,ps])=>
-          `<div class="mcat">${esc(c)}</div>` + ps.map(p=>{
+          (cur === "*" ? `<div class="mcat">${esc(c)}</div>` : "") + ps.map(p=>{
             const q = (cartOf(tid).find(l=>l.productId===p.id)||{}).qty || 0;
             const so = soldOut(p);
             return `<div class="mrow ${q?"on":""} ${so?"sold":""}">
@@ -1387,7 +1547,7 @@ function viewTerminal(){
                   <button data-cqty="${tid}:${p.id}:1">＋</button></div>` : ""}
             </div>`;
           }).join("")).join("")}</div>`
-      : `<div class="empty">商品が登録されていません。</div>`;
+      : `<div class="empty">この ジャンルに商品がありません。</div>`);
   }
   else if(state.term.tab === "cart"){
     const c = cartOf(tid);
@@ -1453,16 +1613,39 @@ function viewOrder(){
   const total = billTotal(t);             // 料金＋注文
   const locked = t.status === "closed";   // 会計完了後は閲覧のみ
 
-  const qtyOf = pid => allLines(tid).filter(l=>l.productId===pid).reduce((s,l)=>s+l.qty,0);
+  /* 触れただけで伝票に入らないよう、いったんカートに入れてから確定する
+     （注文端末とまったく同じ流れ） */
+  const cartQty = pid => (cartOf(tid).find(l=>l.productId===pid)||{}).qty || 0;
   const prods = state.products.length
     ? state.products.map(p=>{
-        const q = qtyOf(p.id);
-        return `<button class="pcard" data-add="${tid}:${p.id}" ${locked?"disabled":""}>
-          ${q?`<span class="q">${q}</span>`:""}
-          <span class="pn">${esc(p.name)}</span>
-          <span class="pp">${yen(p.price)}</span></button>`;
+        const q = cartQty(p.id);
+        const so = soldOut(p);
+        return `<div class="tcard ${q?"on":""}">
+          <button class="ptap" data-cadd="${tid}:${p.id}" ${(locked||so)?"disabled":""}>
+            <span class="pn">${esc(p.name)}${so?`<em style="color:var(--danger);font-style:normal;font-size:10.5px"> 欠品</em>`:""}</span>
+            <span class="pp">${yen(p.price)}</span></button>
+          ${q ? `<div class="pqty">
+              <button data-cqty="${tid}:${p.id}:-1">−</button>
+              <span class="n">${q}</span>
+              <button data-cqty="${tid}:${p.id}:1">＋</button></div>` : ""}
+        </div>`;
       }).join("")
     : `<div class="empty">商品が登録されていません。設定タブから追加してください。</div>`;
+
+  const cc = cartCount(tid);
+  const cartBox = cc ? `<div class="slip" style="margin-bottom:12px;border-color:rgba(215,178,109,.45)">
+      <div class="bhead first">未確定のご注文<span>${yen(cartTotal(tid))}</span></div>
+      ${cartOf(tid).map(l=>`<div class="srow">
+        <div class="sn">${esc(l.name)}<span>${yen(l.price)}</span></div>
+        <div class="sqc">
+          <button data-cqty="${tid}:${l.productId}:-1">−</button>
+          <span class="q">${l.qty}</span>
+          <button data-cqty="${tid}:${l.productId}:1">＋</button></div>
+        <div class="ss">${yen(l.price*l.qty)}</div></div>`).join("")}
+      <div class="sact" style="display:flex;gap:8px">
+        <button class="btn gh" data-cclear="${tid}">取り消す</button>
+        <button class="btn pri" data-confirm="${tid}" style="flex:1">注文を確定する（${cc}点）</button>
+      </div></div>` : "";
 
   const fl = feeLines(t);
   const feeRows = fl.length
@@ -1502,7 +1685,7 @@ function viewOrder(){
       <div class="obtotal">${yen(total)}</div>
     </div>
     <div class="owrap">
-      <div><div class="pgrid">${prods}</div></div>
+      <div>${cartBox}<div class="pgrid">${prods}</div></div>
       <aside class="slip">
         <div class="sec-head" style="margin-top:0"><h2>伝票 ${bs.length?`（${orderCount(tid)}点）`:""}</h2><div class="rule"></div></div>
         ${feeRows}${rows}
@@ -1518,10 +1701,11 @@ function viewSettings(){
     <input class="inp" value="${esc(t.name)}" data-tname="${t.id}" placeholder="卓名">
     <button class="del" data-deltable="${t.id}" aria-label="削除">✕</button></div>`).join("");
 
-  const cst = state.casts.map(c=>`<div class="setrow">
+  const cst = `<div data-draglist="cast">${state.casts.map(c=>`<div class="setrow" data-did="${c.id}">
+    <span class="dragh" data-drag="1">⠿</span>
     <input class="inp" value="${esc(c.name)}" data-cname="${c.id}" placeholder="キャスト名">
     <button class="tog" data-ctog="${c.id}" aria-pressed="${c.active}">${c.active?"出勤":"退勤"}</button>
-    <button class="del" data-delcast="${c.id}" aria-label="削除">✕</button></div>`).join("");
+    <button class="del" data-delcast="${c.id}" aria-label="削除">✕</button></div>`).join("")}</div>`;
 
   const catRows = state.categories.map((c,i)=>`<div class="setrow">
     <span class="no">${i+1}</span>
@@ -1534,7 +1718,8 @@ function viewSettings(){
     return `<div class="grp">
       <button class="grph" data-cat="${esc(c)}" aria-expanded="${open}">
         ${esc(c)}<b>${ps.length}</b><span class="ar">${open?"▲":"▼"}</span></button>
-      ${open ? `<div class="grpb">${ps.map((p,i)=>`<div class="prow">
+      ${open ? `<div class="grpb" data-draglist="prod:${esc(c)}">${ps.map(p=>`<div class="prow" data-did="${p.id}">
+          <span class="dragh" data-drag="1">⠿</span>
           <input class="inp nm" value="${esc(p.name)}" data-pname="${p.id}" placeholder="商品名">
           <div class="prow-b">
             <span class="yen">¥</span>
@@ -1544,8 +1729,6 @@ function viewSettings(){
               ${state.categories.map(x=>`<option value="${esc(x)}" ${p.cat===x?"selected":""}>${esc(x)}</option>`).join("")}
             </select>
             <button class="tog" data-ptrack="${p.id}" aria-pressed="${p.track}">在庫管理${p.track?"する":"しない"}</button>
-            <button data-pmv="${p.id}:-1" ${i===0?"disabled":""} aria-label="上へ">↑</button>
-            <button data-pmv="${p.id}:1" ${i===ps.length-1?"disabled":""} aria-label="下へ">↓</button>
             <button data-pdel="${p.id}" aria-label="削除">✕</button>
           </div></div>`).join("")}
         <button class="add sm" data-addprod="${esc(c)}">＋ ${esc(c)} に商品を追加</button></div>` : ""}
@@ -1606,6 +1789,11 @@ function viewSettings(){
   ${sec("accounts","アカウントと権限", state.accounts.length+"件", `
     ${acs}
     <button class="add" data-addacct="1" style="margin-top:8px">＋ アカウントを追加</button>
+    <div class="prow" style="margin-top:12px">
+      <span class="flab">ログアウト用パスワード<small>右上のアカウントから抜けるときに必要</small></span>
+      <div class="prow-b">
+        <input class="inp pin" inputmode="numeric" maxlength="8"
+               value="${esc(state.logoutPin||"")}" data-logoutpw="1"></div></div>
     <div class="flow" style="margin-top:10px">
       <b style="color:var(--gold)">注文専用</b><i>注文と会計依頼、バッシング完了。卓番は端末側で設定</i><br>
       <b style="color:var(--gold)">厨房</b><i>オーダー通知と在庫のみ</i><br>
@@ -1648,7 +1836,7 @@ function viewSettings(){
   ${sec("products","商品", state.products.length+"件", `
     ${prd || `<div class="empty">商品が登録されていません。</div>`}
     <button class="add" data-addprod="1" style="margin-top:8px">＋ 商品を追加</button>
-    <p class="note">ジャンル名を押すと中身を開閉できます。↑↓の並べ替えはそのジャンルの中で動きます。売値を変えても、すでに入っている伝票の金額は注文時のまま変わりません。</p>`)}
+    <p class="note">ジャンル名を押すと中身を開閉できます。⠿を押さえたまま動かすと並び順を変えられます（そのジャンルの中だけ）。売値を変えても、すでに入っている伝票の金額は注文時のまま変わりません。</p>`)}
 
   ${sec("stock","在庫", state.products.filter(p=>soldOut(p)).length ? "欠品 "+state.products.filter(p=>soldOut(p)).length+"件" : "—", `
     ${stockList()}
@@ -1672,42 +1860,39 @@ function viewSettings(){
     </div>
     <p class="note">注文端末が操作されないままこの時間が過ぎると、自動で待機画面に戻ります。注文を確定しても画面は戻りません。</p>`)}
 
-  ${sec("data","連携とデータ", state.storeCode||state.syncUrl ? (syncState.ok===true?"接続中":(syncState.ok===false?"エラー":"未確認")) : "未設定", `
-    <div class="field"><label>店舗コード</label>
+  ${sec("data","連携とデータ", state.storeCode||state.syncUrl ? (syncState.ok===true?"別端末と連携中":(syncState.ok===false?"エラー":"未確認")) : "未設定", `
+    <div class="bigsync ${syncState.ok===true?"on":(syncState.ok===false?"ng":"")}">
+      <div class="bs-t">${syncState.ok===true ? "別端末と連携中" : (syncState.ok===false ? "連携できていません" : "未接続")}</div>
+      <div class="bs-m">${esc(syncState.msg)}${syncState.lastOk ? `　最終通信 ${hhmm(syncState.lastOk)}` : ""}</div>
+    </div>
+    ${(syncState.detail && syncState.detail.length) ? `<div class="errbox">
+      <b>試したサービスと結果</b>
+      ${syncState.detail.map(d=>`<div>・${esc(d)}</div>`).join("")}
+    </div>` : ""}
+
+    <div class="field" style="margin-top:16px"><label>Firebase のURL（おすすめ）</label>
+      <input class="inp" value="${esc(state.syncUrl||"")}" data-syncurl="1"
+             placeholder="https://〇〇-default-rtdb.firebasedatabase.app/store.json">
+      <button class="btn wide" style="margin-top:8px" data-synctest="1">接続テスト</button>
+      <p class="round-hint">
+        <b>14台すべてに、まったく同じURLを貼ってください。</b>
+        これだけで別端末どうしが同期します。手順は同梱の <b>firebase-setup.md</b> に書いてあります。<br><br>
+        入力後に「接続テスト」を押して、上の表示が<b>「別端末と連携中」</b>になれば成功です。
+      </p></div>
+
+    <div class="field"><label>店舗コード（Firebaseを使わない場合）</label>
       ${state.storeCode ? `<div class="codebox">${esc(codeView(state.storeCode))}</div>` : ""}
       <input class="inp" value="${esc(state.storeCode||"")}" data-storecode="1"
              placeholder="他の端末で作ったコードを入力">
       <div class="quick" style="margin-top:8px">
         <button data-newcode="1">新しく作る</button>
-        <button data-synctest="1">接続テスト</button>
       </div>
-      <div class="sync ${syncState.ok===true?"":"off"}" style="margin-top:10px">
-        <span class="dot"></span>
-        ${syncState.ok===true ? "✓ " : (syncState.ok===false ? "× " : "")}${esc(syncState.msg)}
-        ${syncState.lastOk ? `（最終通信 ${hhmm(syncState.lastOk)}）` : ""}</div>
-      ${(syncState.detail && syncState.detail.length) ? `<div class="errbox">
-        <b>試したサービスと結果</b>
-        ${syncState.detail.map(d=>`<div>・${esc(d)}</div>`).join("")}
-        <div class="hint">すべて失敗した場合は、下の「独自サーバー」欄をお使いください。
-          Firebase のURLを入れると、登録は必要ですがリアルタイムで確実に同期します。</div>
-      </div>` : ""}
-      <p class="round-hint">
-        <b>1台目で「新しく作る」を押し、出てきたコードを他の端末に入力するだけです。</b>
-        同じコードの端末どうしが、ネットが別々でも自動で同期します。<br><br>
-        コードを知っていれば誰でもデータを見られます。人に見せないでください。
-      </p></div>
+      <p class="round-hint">上のFirebaseのURLが入っている場合は、そちらが優先されます。</p></div>
 
-    <div class="sync ${chan?"":"off"}"><span class="dot"></span>
-      同じブラウザの別タブ：${chan ? "連携中" : "使えません"}</div>
-    <div class="sync ${PERSIST?"":"off"}"><span class="dot"></span>
-      この端末への保存：${PERSIST ? "有効（再読み込みしても残ります）" : "無効"}</div>
-
-    <div class="field" style="margin-top:16px"><label>独自サーバーを使う場合（上級者向け）</label>
-      <input class="inp" value="${esc(state.syncUrl||"")}" data-syncurl="1"
-             placeholder="https://xxxx.workers.dev/sync">
-      <p class="round-hint">ここに入力すると、店舗コードより優先されます。
-        端末が多く通信量が増える場合や、データを自分で管理したい場合は、
-        同梱の <b>cloudflare-worker.js</b> の手順で自前のサーバーを用意できます。</p></div>
+    <div class="sync ${chan?"":"off"}" style="opacity:.65"><span class="dot"></span>
+      参考：同じ端末で複数タブを開いた場合の連携 ${chan ? "有効" : "無効"}</div>
+    <div class="sync ${PERSIST?"":"off"}" style="opacity:.65"><span class="dot"></span>
+      参考：この端末への保存 ${PERSIST ? "有効" : "無効"}</div>
 
     <button class="btn dan wide" style="margin-top:14px" data-reset="1">すべてリセット</button>`)}
   `;
@@ -1853,6 +2038,20 @@ function sheetBill(tid){
     <div class="sheet-acts"><button class="btn gh" data-closesheet="1">閉じる</button></div>`);
 }
 
+/* ログアウトはパスワードを入れてから */
+let logoutPin = "", logoutErr = "";
+function sheetLogout(){
+  const a = acctOf();
+  openSheet(`<h3>ログアウト<small>${a?esc(a.name)+"（"+ROLES[a.role].label+"）":""}</small></h3>
+    <div class="field"><label>パスワード</label>
+      <input class="inp pinbox" id="logoutPinInput" data-logoutpin="1" type="password"
+             inputmode="numeric" maxlength="8" value="${esc(logoutPin)}" placeholder="••••"></div>
+    ${logoutErr ? `<p class="note" style="color:var(--danger);margin:-8px 0 0">${esc(logoutErr)}</p>` : ""}
+    <p class="note">正しいパスワードを入れると、そのままログアウトします。</p>
+    <div class="sheet-acts"><button class="btn gh" data-closesheet="1">やめる</button></div>`);
+  setTimeout(()=>{ const i = document.getElementById("logoutPinInput"); if(i) i.focus(); }, 60);
+}
+
 function sheetAccount(){
   const a = acctOf(); if(!a) return;
   const r = ROLES[a.role];
@@ -1867,6 +2066,7 @@ function sheetAccount(){
     <div class="statenow"><span class="dot" style="background:var(--gold)"></span>${r.label}</div>
     <p class="note" style="margin:0 0 18px">${perms}</p>
     <button class="btn dan big wide" data-logout="1">ログアウト</button>
+    <p class="note" style="margin:8px 0 0">ログアウトにはパスワードが必要です。</p>
     <div class="sheet-acts"><button class="btn gh" data-closesheet="1">閉じる</button></div>`);
 }
 
@@ -1943,7 +2143,7 @@ function renderNewRot(){
 
 /* ========== events ========== */
 document.addEventListener("click", e=>{
-  const el = e.target.closest("[data-newcode],[data-synctest],[data-btab],[data-obill],[data-receipt],[data-srange],[data-ptrack],[data-tcast],[data-persist],[data-firstoff],[data-dfee],[data-sec],[data-cat],[data-catadd],[data-catdel],[data-kdone],[data-kundo],[data-pstock],[data-feeon],[data-feetog],[data-idle],[data-okconfirm],[data-dev],[data-devclose],[data-devset],[data-tcancel],[data-tbus],[data-tstart],[data-thome],[data-ttab],[data-cadd],[data-cqty],[data-confirm],[data-cclear],[data-tbill],[data-key],[data-acct],[data-logout],[data-otab],[data-addacct],[data-adel],[data-tab],[data-filter],[data-table],[data-closesheet],[data-go],[data-guest],[data-new-rot],[data-order],[data-add],[data-qty],[data-addprod],[data-pdel],[data-pmv],[data-goto-rot],[data-next-rot],[data-pause-rot],[data-extend-rot],[data-close-rot],[data-restart-rot],[data-tcount],[data-tset],[data-dmin],[data-addcast],[data-delcast],[data-ctog],[data-deltable],[data-reset],[data-pick],[data-mv],[data-rm],[data-dguest],[data-dmin2],[data-dminset],[data-dper],[data-startrot]");
+  const el = e.target.closest("[data-mcat],[data-newcode],[data-synctest],[data-btab],[data-obill],[data-receipt],[data-srange],[data-ptrack],[data-tcast],[data-persist],[data-firstoff],[data-dfee],[data-sec],[data-cat],[data-catadd],[data-catdel],[data-kdone],[data-kundo],[data-pstock],[data-feeon],[data-feetog],[data-idle],[data-okconfirm],[data-dev],[data-devclose],[data-devset],[data-tcancel],[data-tbus],[data-tstart],[data-thome],[data-ttab],[data-cadd],[data-cqty],[data-confirm],[data-cclear],[data-tbill],[data-key],[data-acct],[data-logout],[data-otab],[data-addacct],[data-adel],[data-tab],[data-filter],[data-table],[data-closesheet],[data-go],[data-guest],[data-new-rot],[data-order],[data-qty],[data-addprod],[data-pdel],[data-goto-rot],[data-next-rot],[data-pause-rot],[data-extend-rot],[data-close-rot],[data-restart-rot],[data-tcount],[data-tset],[data-dmin],[data-addcast],[data-delcast],[data-ctog],[data-deltable],[data-reset],[data-pick],[data-mv],[data-rm],[data-dguest],[data-dmin2],[data-dminset],[data-dper],[data-startrot]");
   if(!el){
     if(e.target.dataset && e.target.dataset.sheet) closeSheet();
     return;
@@ -1962,20 +2162,33 @@ document.addEventListener("click", e=>{
   if(d.devclose){ devPin=""; devErr=""; devAuthed=false; closeSheet(); return; }
   if(d.devset){
     state.deviceTable = d.devset;
-    state.term = { stage:"idle", tab:"menu" };
+    state.term = { stage:"idle", tab:"menu", cat:"*" };
     devPin=""; devErr=""; devAuthed=false;
     closeSheet(); commit(); toast(`${tableOf(d.devset).name} 卓に設定しました`); return;
   }
   if(d.tstart){
     const t = state.deviceTable ? tableOf(state.deviceTable) : null;
+    /* 空席のときは、画面に触れただけで時間が始まらないよう必ず確認を挟む */
     if(t && t.status === "empty"){
-      go(t, "serving");                       // 入店時刻を打刻してセット料金・指名料を開始
-      toast(`${hhmm(t.seatedAt)} 入店：セット料金 ${yen(setFee(t))} / 指名料 ${yen(state.fees.nom)}`);
+      askConfirm({
+        title: "ご案内を開始しますか？",
+        ok: "開始する",
+        msg: `${esc(t.name)}卓の<b>入店時刻を記録</b>し、セット料金 ${yen(state.fees.setBase)}`
+           + `${state.fees.nom ? ` と指名料 ${yen(state.fees.nom)}` : ""} が発生します。`,
+        run: ()=>{
+          go(t, "serving");
+          state.term = {stage:"active", tab:"menu", cat:state.term.cat||"*"};
+          window.scrollTo(0,0); commit();
+          toast(`${hhmm(t.seatedAt)} 入店`);
+        }
+      });
+      return;
     }
-    state.term = {stage:"active", tab:"menu"}; window.scrollTo(0,0); commit(); return;
+    state.term = {stage:"active", tab:"menu", cat:state.term.cat||"*"}; window.scrollTo(0,0); commit(); return;
   }
   if(d.thome){ state.term.stage = "idle"; window.scrollTo(0,0); render(); return; }
   if(d.ttab){ state.term.tab = d.ttab; window.scrollTo(0,0); render(); return; }
+  if(d.mcat){ state.term.cat = d.mcat; window.scrollTo(0,0); render(); return; }
   if(d.cadd){ const [tid,pid] = d.cadd.split(":"); cartAdd(tid,pid,1); commit(); return; }
   if(d.cqty){ const [tid,pid,dv] = d.cqty.split(":"); cartAdd(tid,pid,Number(dv)); commit(); return; }
   if(d.cclear){
@@ -1989,7 +2202,7 @@ document.addEventListener("click", e=>{
   if(d.confirm){
     const n = cartCount(d.confirm), amt = cartTotal(d.confirm);
     if(!cartConfirm(d.confirm)) return;
-    state.term.tab = "menu";          // 待機画面には戻さず、続けて注文できるようにする
+    if(roleOf() === "order") state.term.tab = "menu";   // 端末は待機画面に戻さず続けて注文できるように
     window.scrollTo(0,0); commit();
     toast(`注文を確定しました（${n}点 ${yen(amt)}）`); return;
   }
@@ -1997,17 +2210,17 @@ document.addEventListener("click", e=>{
     const tid = d.tbill, t = tableOf(tid);
     askConfirm({ title:"会計に進みます", ok:"会計をお願いする",
       msg:`合計 <b style="color:var(--gold);font-family:var(--mono)">${yen(billTotal(t))}</b><br>これ以降このテーブルからは注文できなくなります。`,
-      run:()=>{ go(t,"billing"); state.term = {stage:"idle", tab:"menu"}; window.scrollTo(0,0); commit(); } });
+      run:()=>{ go(t,"billing"); state.term = {stage:"idle", tab:"menu", cat:"*"}; window.scrollTo(0,0); commit(); } });
     return;
   }
   if(d.tcancel){
     const t = tableOf(d.tcancel);
-    go(t,"serving"); state.term = {stage:"idle", tab:"menu"}; commit();
+    go(t,"serving"); state.term = {stage:"idle", tab:"menu", cat:"*"}; commit();
     toast("会計をキャンセルしました"); return;
   }
   if(d.tbus){
     const t = tableOf(d.tbus);
-    go(t,"empty"); state.term = {stage:"idle", tab:"menu"}; commit();
+    go(t,"empty"); state.term = {stage:"idle", tab:"menu", cat:"*"}; commit();
     toast("バッシング完了：空席に戻しました"); return;
   }
 
@@ -2025,7 +2238,7 @@ document.addEventListener("click", e=>{
         state.session = a.id;
         state.tab = ROLES[a.role].tabs[0];
         state.orderTable = null;
-        state.term = { stage:"idle", tab:"menu" };
+        state.term = { stage:"idle", tab:"menu", cat:"*" };
         restartPolling();
         commit(); toast(`${a.name}（${ROLES[a.role].label}）でログインしました`);
       } else {
@@ -2039,10 +2252,7 @@ document.addEventListener("click", e=>{
     commit(); return;
   }
   if(d.acct){ sheetAccount(); return; }
-  if(d.logout){
-    state.session = null; state.pin = ""; state.pinErr = "";
-    closeSheet(); commit(); return;
-  }
+  if(d.logout){ logoutPin = ""; logoutErr = ""; sheetLogout(); return; }
 
   if(d.tab){ state.tab = d.tab; state.filter="all"; render(); return; }
   if(d.filter){ state.filter = d.filter; render(); return; }
@@ -2091,11 +2301,6 @@ document.addEventListener("click", e=>{
     state.orderTable = d.order; state.tab = "order"; closeSheet(); window.scrollTo(0,0); commit(); return;
   }
   if(d.otab){ state.orderTable = d.otab; commit(); return; }
-  if(d.add){
-    const [tid,pid] = d.add.split(":"); const t = tableOf(tid);
-    if(t.status === "empty") go(t,"serving");     // 注文が入った時点で接客中に
-    addLine(tid,pid); commit(); return;
-  }
   if(d.qty){ const [tid,lid,dv] = d.qty.split(":"); setQty(tid,lid,Number(dv)); commit(); return; }
 
   /* accounts */
@@ -2130,12 +2335,7 @@ document.addEventListener("click", e=>{
   if(d.btab){ state.billTable = d.btab; window.scrollTo(0,0); render(); return; }
   if(d.obill){ state.openBill = (state.openBill === d.obill) ? null : d.obill; render(); return; }
   if(d.synctest){ testSync(); return; }
-  if(d.newcode){
-    askConfirm({ title:"新しい店舗コードを作りますか？", ok:"作成する",
-      msg:"この端末の内容が新しいコードの中身になります。<br>2台目以降は作らずに、1台目のコードを入力してください。",
-      run:()=>createStoreCode() });
-    return;
-  }
+  if(d.newcode){ createStoreCode(); return; }
   if(d.sec){ state.openSecs[d.sec] = !state.openSecs[d.sec]; render(); return; }
   if(d.srange){
     if(!state.salesRange) state.salesRange = { from: todayStr(), to: todayStr() };
@@ -2181,16 +2381,7 @@ document.addEventListener("click", e=>{
   if(d.pdel){
     state.products = state.products.filter(p=>p.id!==d.pdel); commit(); return;
   }
-  if(d.pmv){
-    const [pid,dv] = d.pmv.split(":"); const p = prodOf(pid); if(!p) return;
-    const sibs = state.products.filter(x=>x.cat===p.cat);
-    const i = sibs.indexOf(p), j = i + Number(dv);
-    if(j < 0 || j >= sibs.length) return;
-    const a = state.products;
-    const ia = a.indexOf(sibs[i]), ib = a.indexOf(sibs[j]);
-    [a[ia],a[ib]] = [a[ib],a[ia]];
-    commit(); return;
-  }
+  if(d.pmv){ /* 廃止：ドラッグ並べ替えに統一（reorderProducts が担当） */ return; }
   if(d.feeon){
     state.fees[d.feeon] = !state.fees[d.feeon]; commit(); return;
   }
@@ -2262,7 +2453,7 @@ document.addEventListener("click", e=>{
       run:()=>{
         state.tables.forEach(t=>{ t.status="empty"; t.guests=0; t.seatedAt=null; t.statusSince=Date.now(); });
         state.rotations = []; state.orders = {}; state.cart = {}; state.orderTable = null;
-        state.term = { stage:"idle", tab:"menu" };
+        state.term = { stage:"idle", tab:"menu", cat:"*" };
         commit(); toast("初期化しました");
       } });
     return;
@@ -2277,7 +2468,24 @@ function commitSoft(){                     // 入力中は再描画せず配信�
 document.addEventListener("input", e=>{
   const t = e.target;
   if(t.dataset && (t.dataset.pname||t.dataset.pprice||t.dataset.tname||t.dataset.cname||
-     t.dataset.fee||t.dataset.pstocknum||t.dataset.catname||t.dataset.aname||t.dataset.apin||t.dataset.cust)) commitSoft();
+     t.dataset.fee||t.dataset.pstocknum||t.dataset.catname||t.dataset.aname||t.dataset.apin||
+     t.dataset.cust||t.dataset.logoutpw)) commitSoft();
+  if(t.dataset.logoutpin){
+    logoutPin = t.value.replace(/[^0-9]/g,"").slice(0,8);
+    t.value = logoutPin; logoutErr = "";
+    const want = String(state.logoutPin || "1234");
+    if(logoutPin.length >= want.length){
+      if(logoutPin === want){
+        logoutPin = ""; logoutErr = "";
+        state.session = null; state.pin = ""; state.pinErr = "";
+        closeSheet(); render();
+        return;
+      }
+      logoutErr = "パスワードが違います"; logoutPin = "";
+      sheetLogout();
+    }
+    return;
+  }
   if(t.dataset.devpin){
     devPin = t.value.replace(/[^0-9]/g,"").slice(0,4);
     t.value = devPin; devErr = "";
@@ -2323,6 +2531,10 @@ document.addEventListener("input", e=>{
     return;
   }
   if(t.dataset.aname){ const a=state.accounts.find(x=>x.id===t.dataset.aname); if(a) a.name=t.value; return; }
+  if(t.dataset.logoutpw !== undefined){
+    state.logoutPin = t.value.replace(/[^0-9]/g,"").slice(0,8);
+    t.value = state.logoutPin; return;
+  }
   if(t.dataset.syncurl !== undefined){ state.syncUrl = t.value; return; }     // 確定はblur(change)側で行う
   if(t.dataset.storecode !== undefined){ state.storeCode = t.value; return; } // 同上
   if(t.dataset.apin){
@@ -2462,8 +2674,10 @@ const PERSIST = true;                  // 端末のブラウザに保存し、�
 const SYNC_KEY = "store-manager-v1";
 const CLOUD_KEY = "state";             // window.storage 上のキー
 const CLIENT_ID = uid();
+/* cart（確定前のカート）は端末ごとのものなので同期しない。
+   同期すると、確定してカートを空にした直後に他端末の古いカートが戻ってきてしまう。 */
 const SHARED = ["shopName","tables","casts","categories","products","accounts",
-                "orders","cart","fees","rotations","defaultMin","idleSec","rev","billHistory"];
+                "orders","fees","rotations","defaultMin","idleSec","rev","billHistory","logoutPin"];
 
 const CLOUD = !!(typeof window !== "undefined" && window.storage &&
                typeof window.storage.get === "function");   // 端末をまたぐ同期が使えるか
@@ -2628,6 +2842,8 @@ function netMsg(e){
   return m || "接続できません";
 }
 let remoteRev = 0, remoteTimer = null, es = null;
+let lastStamp = "";        // 取り込み済みの記録（誰が・いつ書いたか）
+let syncReady = false;     // 最初の取り込みが済むまで送信しない（他端末を空で上書きしないため）
 try {
   const c = localStorage.getItem(CODE_KEY);
   if(c) state.storeCode = c;
@@ -2653,6 +2869,7 @@ function syncNote(ok, msg){
 
 async function pushRemote(){
   if(!endpoint()) return;
+  if(!syncReady) return;      // 先に相手の内容を取り込むまで送らない
 
   /* (0) 店舗コード：公開の保管サービスを更新する */
   if(!state.syncUrl && state.storeCode){
@@ -2717,11 +2934,16 @@ function startStream(){
     let m;
     try { m = JSON.parse(ev.data); } catch(e){ return; }
     if(!m) return;
+    const wasOk = syncState.ok;
     syncNote(true, "接続中（リアルタイム）");
     // path が "/" のときは全体、それ以外は部分更新なので取り直す
     const rec = (m.path === "/" && m.data) ? m.data : null;
-    if(!rec){ if(m.path && m.path !== "/") pullRemote(); return; }
-    if(rec.from === CLIENT_ID) return;              // 自分が書いたものは無視
+    if(!rec){ if(m.path && m.path !== "/") pullRemote(); else if(syncState.ok!==wasOk && state.session) render(); return; }
+    syncReady = true;
+    if(rec.from === CLIENT_ID){ if(syncState.ok!==wasOk && state.session) render(); return; }
+    const st = (rec.at || 0) + ":" + (rec.from || "");
+    if(st === lastStamp){ if(syncState.ok!==wasOk && state.session) render(); return; }
+    lastStamp = st;
     remoteRev = rec.rev || remoteRev;
     if(rec.data) applyRemote(rec.data);
   };
@@ -2737,19 +2959,33 @@ function stopStream(){ if(es){ try{ es.close(); }catch(e){} es = null; } }
 
 async function pullRemote(){
   if(!endpoint()) return;
+  const wasOk = syncState.ok;                          // 直前の接続状態（表示を更新すべきか判定するため）
   const url = state.syncUrl ? (isFirebase(state.syncUrl) ? fbUrl() : state.syncUrl) : endpoint();
+  const paintIfChanged = ()=>{ if(syncState.ok !== wasOk && state.session) render(); };
   try{
     const res = await fetch(url, { cache:"no-store" });
-    if(res.status === 429){ syncNote(false, "通信が多すぎます。少し待つと自動で戻ります"); return; }
-    if(res.status === 404 && !state.syncUrl){ syncNote(false, "この店舗コードは見つかりません。作り直してください"); return; }
-    if(!res.ok){ syncNote(false, `サーバーがエラーを返しました（${res.status}）`); return; }
+    if(res.status === 429){ syncNote(false, "通信が多すぎます。少し待つと自動で戻ります"); paintIfChanged(); return; }
+    if(res.status === 404 && !state.syncUrl){ syncNote(false, "この店舗コードは見つかりません。作り直してください"); paintIfChanged(); return; }
+    if(!res.ok){ syncNote(false, `サーバーがエラーを返しました（${res.status}）`); paintIfChanged(); return; }
     const m = await res.json();
     syncNote(true, isFirebase(state.syncUrl) ? "接続中（リアルタイム）" : "接続中");
-    if(!m || m.from === CLIENT_ID || m.rev === remoteRev) return;
-    remoteRev = m.rev;
-    if(m.data) applyRemote(m.data);
+
+    // 相手にまだ何も無いなら、こちらの内容を最初の1件として送る
+    if(!m || !m.data){
+      syncReady = true;
+      await pushRemote();
+      paintIfChanged(); return;
+    }
+    syncReady = true;
+    if(m.from === CLIENT_ID){ paintIfChanged(); return; }   // 自分が書いたものは無視
+    const stamp = (m.at || 0) + ":" + (m.from || "");
+    if(stamp === lastStamp){ paintIfChanged(); return; }    // 取り込み済み（データは同じでも接続状態は表示を更新する）
+    lastStamp = stamp;
+    remoteRev = m.rev || remoteRev;
+    applyRemote(m.data);                                    // ここは常に再描画される
   } catch(e){
     syncNote(false, netMsg(e));
+    paintIfChanged();
   }
 }
 
@@ -2825,6 +3061,7 @@ async function createStoreCode(){
   syncState.detail = errs;
   syncNote(false, "どのサービスにも接続できませんでした");
   render();
+  toast("接続できません：" + (errs[0] || ""));
 }
 
 function setStoreCode(code){
@@ -2833,8 +3070,8 @@ function setStoreCode(code){
     if(state.storeCode) localStorage.setItem(CODE_KEY, state.storeCode);
     else localStorage.removeItem(CODE_KEY);
   } catch(e){}
-  remoteRev = 0;
-  syncNote(null, state.storeCode ? "確認していません" : "未設定");
+  remoteRev = 0; lastStamp = ""; syncReady = false;
+  syncNote(null, state.storeCode ? "接続しています…" : "未設定");
   restartPolling();
   if(state.storeCode) pullRemote();
 }
@@ -2845,9 +3082,16 @@ function setSyncUrl(url){
     if(state.syncUrl) localStorage.setItem(SYNC_URL_KEY, state.syncUrl);
     else localStorage.removeItem(SYNC_URL_KEY);
   } catch(e){}
-  syncNote(null, state.syncUrl ? "確認していません" : "未設定");
-  restartPolling();
-  if(state.syncUrl) pullRemote();
+  lastStamp = ""; syncReady = false; remoteRev = 0;
+  syncNote(null, state.syncUrl ? "接続しています…" : "未設定");
+  stopStream();
+  if(state.syncUrl && isFirebase(state.syncUrl)){
+    startStream();            // 変更が向こうから届くリアルタイム接続
+    restartPolling();         // 取りこぼし対策の保険
+  } else {
+    restartPolling();
+  }
+  if(endpoint()) pullRemote();
 }
 if(endpoint()){                                   // 起動時、前回の設定があれば自動で再接続
   if(state.syncUrl && isFirebase(state.syncUrl)) startStream(); else restartPolling();
@@ -2855,12 +3099,116 @@ if(endpoint()){                                   // 起動時、前回の設定
 }
 
 /* 状態を変えたら必ずこれを呼ぶ：画面更新＋他タブ／他端末へ配信＋保存 */
+/* ==========================================================
+   ドラッグでの並べ替え（商品・キャスト）
+   ・ハンドル（⠿）を掴んだ瞬間から、指の位置にある行と即座に入れ替える。
+   ・並べ替え中は再描画を止め、離した瞬間に確定して1回だけ commit() する。
+   ========================================================== */
+let dctx = null;
+
+function wireDrag(){
+  if(typeof document === "undefined") return;
+  document.querySelectorAll(".dragh").forEach(h=>{
+    if(h.dataset.wired) return;
+    h.dataset.wired = "1";
+    h.addEventListener("pointerdown", dragStart);
+  });
+}
+
+function dragStart(e){
+  const handle = e.currentTarget;
+  const row = handle.closest("[data-did]");
+  const list = handle.closest("[data-draglist]");
+  if(!row || !list) return;
+  e.preventDefault();
+  try{ handle.setPointerCapture(e.pointerId); }catch(err){}
+  row.classList.add("dragging");
+  handle.classList.add("pulse");
+  setTimeout(()=>handle.classList.remove("pulse"), 500);
+  dctx = { row, list, pid:e.pointerId };
+  document.addEventListener("pointermove", dragMove);
+  document.addEventListener("pointerup", dragEnd);
+  document.addEventListener("pointercancel", dragEnd);
+}
+function dragMove(e){
+  if(!dctx) return;
+  e.preventDefault();
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  const overRow = el && el.closest("[data-did]");
+  if(!overRow || overRow === dctx.row) return;
+  if(overRow.closest("[data-draglist]") !== dctx.list) return;   // ジャンルをまたいだ並べ替えはしない
+
+  /* FLIP：並び替え前の位置を全行ぶん記録しておき、insertBefore で瞬間移動させたあと
+     差分だけ逆向きに一瞬ずらして、0へアニメーションで戻す＝滑らかに動いて見える */
+  const rows = [...dctx.list.children].filter(el=>el.matches && el.matches("[data-did]"));
+  const before = rows.map(el=>({ el, top: el.getBoundingClientRect().top }));
+
+  const rect = overRow.getBoundingClientRect();
+  const putBefore = (e.clientY - rect.top) < rect.height / 2;
+  dctx.list.insertBefore(dctx.row, putBefore ? overRow : overRow.nextSibling);
+
+  before.forEach(b=>{
+    if(b.el === dctx.row) return;                     // つかんでいる行自身は別演出（CSSのscale）に任せる
+    const after = b.el.getBoundingClientRect().top;
+    const delta = b.top - after;
+    if(Math.abs(delta) < 1) return;
+    b.el.style.transition = "none";
+    b.el.style.transform = `translateY(${delta}px)`;
+    requestAnimationFrame(()=>{
+      b.el.style.transition = "transform .16s ease";
+      b.el.style.transform = "";
+    });
+  });
+}
+function dragEnd(){
+  if(!dctx) return;
+  const { row, list } = dctx;
+  row.classList.remove("dragging");
+  document.removeEventListener("pointermove", dragMove);
+  document.removeEventListener("pointerup", dragEnd);
+  document.removeEventListener("pointercancel", dragEnd);
+  dctx = null;
+
+  const kind = list.dataset.draglist;
+  const ids = [...list.children].filter(el=>el.matches && el.matches("[data-did]")).map(el=>el.dataset.did);
+  if(kind === "cast") reorderCasts(ids);
+  else if(kind && kind.indexOf("prod:") === 0) reorderProducts(kind.slice(5), ids);
+}
+
+function reorderCasts(ids){
+  const byId = {}; state.casts.forEach(c=>byId[c.id]=c);
+  const next = ids.map(id=>byId[id]).filter(Boolean);
+  if(next.length !== state.casts.length) return;   // 想定外の状態なら何もしない
+  state.casts = next;
+  commit();
+}
+function reorderProducts(cat, ids){
+  const byId = {}; state.products.filter(p=>p.cat===cat).forEach(p=>byId[p.id]=p);
+  const queue = ids.map(id=>byId[id]).filter(Boolean);
+  if(queue.length !== Object.keys(byId).length) return;
+  const q = queue.slice();
+  state.products = state.products.map(p => p.cat === cat ? q.shift() : p);
+  commit();
+}
+
 function commit(){
   render();
   clearTimeout(syncTimer);
   syncTimer = setTimeout(()=>{ send(); saveLocal(); pushCloud(); pushRemote(); }, 60);
 }
 const syncOn = () => !!chan || CLOUD;
+
+/* ヘッダーの実際の高さを測って、貼り付く要素の位置を合わせる。
+   端末や文字サイズでヘッダーの高さが変わるため、固定値だと下に隠れてしまう。 */
+function fitTopbar(){
+  const tb = document.querySelector(".topbar");
+  const h = tb ? tb.offsetHeight : 0;
+  if(h > 0) document.documentElement.style.setProperty("--tb", h + "px");
+}
+if(typeof window !== "undefined"){
+  window.addEventListener("resize", fitTopbar);
+  window.addEventListener("orientationchange", ()=>setTimeout(fitTopbar, 200));
+}
 
 /* ---- 注文端末：無操作が続いたら待機画面に戻す ---- */
 let idleTimer = null;
@@ -2869,7 +3217,7 @@ function resetIdle(){
   if(!state.session || roleOf() !== "order" || state.term.stage !== "active") return;
   idleTimer = setTimeout(()=>{
     if(state.session && roleOf() === "order" && state.term.stage === "active"){
-      state.term = { stage:"idle", tab:"menu" };
+      state.term = { stage:"idle", tab:"menu", cat:"*" };
       render();
     }
   }, Math.max(10, state.idleSec) * 1000);
