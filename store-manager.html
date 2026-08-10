@@ -402,6 +402,27 @@ body.login main{max-width:none;padding:0}
   padding:6px 8px;text-align:center;font-family:var(--mono);font-size:14px;letter-spacing:.14em}
 .prow-b button{width:32px;height:32px;border-radius:7px;background:var(--surface);border:1px solid var(--line);
   display:grid;place-items:center;font-size:14px;color:var(--muted);flex:0 0 auto}
+
+/* 商品一覧だけは詰め込みすぎず、2段のカード形式でゆったり表示する
+   （在庫管理ボタンなどが窮屈にならないように） */
+.prow.pcard{display:block;padding:13px 14px;border-radius:12px;margin-bottom:11px}
+.pcard .prow-top{display:flex;align-items:center;gap:10px;margin-bottom:13px}
+.pcard .nm{flex:1;min-width:0;background:transparent;border:0;border-bottom:1px solid transparent;
+  padding:7px 2px;font-size:16px;font-weight:600;color:var(--text)}
+.pcard .nm:focus{outline:none;border-bottom-color:var(--gold)}
+.pcard .del{width:36px;height:36px;flex:0 0 auto;border-radius:9px;background:var(--surface2);
+  border:1px solid var(--line);display:grid;place-items:center;font-size:15px;color:var(--muted)}
+.pcard .prow-bot{display:flex;flex-wrap:wrap;gap:14px 18px}
+.pfield{display:flex;flex-direction:column;gap:6px;min-width:118px;flex:1 1 118px}
+.pfield label{font-size:10.5px;letter-spacing:.08em;color:var(--muted);font-weight:700}
+.pfield-in{display:flex;align-items:center;gap:6px}
+.pcard .pr{width:100%;background:var(--surface2);border:1px solid var(--line);border-radius:8px;
+  padding:9px 10px;text-align:left;font-family:var(--mono);font-size:14.5px}
+.pcard .ab{width:100%;background:var(--surface2);border:1px solid var(--line);border-radius:8px;
+  padding:9px 10px;font-size:14px}
+.pcard .rl{width:100%;background:var(--surface2);border:1px solid var(--line);border-radius:8px;
+  padding:9px 10px;font-size:13.5px}
+.tog.wide{width:100%;padding:11px 12px;text-align:center;font-size:13.5px}
 .prow-b button:disabled{opacity:.3}
 
 /* ---------- order terminal ---------- */
@@ -635,13 +656,19 @@ body.login main{max-width:none;padding:0}
 .tog{padding:7px 11px;border-radius:7px;border:1px solid var(--line);font-size:11.5px;
   font-weight:700;color:var(--muted);flex:0 0 auto;background:var(--surface2);white-space:nowrap}
 .slab{font-size:11.5px;color:var(--muted);white-space:nowrap;flex:0 0 auto}
-.strow{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:7px}
+.strow{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:13px 14px;margin-bottom:10px}
 .strow.out{border-color:rgba(214,95,78,.4)}
 .strow .sname{font-size:14.5px;font-weight:600;line-height:1.35}
 .strow .sname small{color:var(--muted);font-family:var(--mono);font-weight:500;margin-left:8px;font-size:12px}
 .strow .sname em{font-style:normal;margin-left:8px;font-size:10.5px;font-weight:700;color:var(--danger);
   border:1px solid rgba(214,95,78,.4);border-radius:5px;padding:2px 6px}
-.strow .sctl{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:9px}
+.strow .sctl{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:11px}
+.strow .sctl button{width:38px;height:38px;flex:0 0 auto;border-radius:9px;background:var(--surface2);
+  border:1px solid var(--line);display:grid;place-items:center;font-size:17px;color:var(--text)}
+.strow .sctl button:active{background:var(--surface)}
+.strow .stk{width:64px;height:38px;text-align:center;font-size:15px;background:var(--surface2);
+  border:1px solid var(--line);border-radius:9px}
+.strow .slab{font-size:12.5px}
 .sync{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);
   background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-bottom:10px}
 .sync .dot{width:8px;height:8px;border-radius:50%;background:var(--st-serving);flex:0 0 auto}
@@ -881,7 +908,7 @@ function addLine(tid, pid){
   // 同じ商品でも売値が変わっていれば別行にする（注文時点の値段を保持）
   const hit = b.lines.find(l => l.productId===pid && l.price===p.price);
   if(hit) hit.qty++;
-  else b.lines.push({ id:uid(), productId:pid, name:p.name, price:p.price, qty:1 });
+  else b.lines.push({ id:uid(), productId:pid, name:p.name, abbr:p.abbr||"", price:p.price, qty:1 });
   b.at = Date.now(); takeStock(pid, 1); state.rev++;
 }
 function setQty(tid, lid, dv){
@@ -956,7 +983,7 @@ function cartAdd(tid, pid, dv){
     hit.qty += dv;
     if(hit.qty <= 0) state.cart[tid] = c.filter(l=>l.productId!==pid);
   } else if(dv > 0){
-    c.push({ productId:pid, name:p.name, price:p.price, qty:dv });
+    c.push({ productId:pid, name:p.name, abbr:p.abbr||"", price:p.price, qty:dv });
   }
 }
 function takeStock(pid, qty){
@@ -967,7 +994,7 @@ function cartConfirm(tid){
   const c = cartOf(tid); if(!c.length) return false;
   const t = tableOf(tid);
   if(t.status === "empty") go(t, "serving");   // 注文が入った時点で接客中に
-  pushBatch(tid, c.map(l=>({ id:uid(), productId:l.productId, name:l.name, price:l.price, qty:l.qty })), false);
+  pushBatch(tid, c.map(l=>({ id:uid(), productId:l.productId, name:l.name, abbr:l.abbr||"", price:l.price, qty:l.qty })), false);
   c.forEach(l=>takeStock(l.productId, l.qty));
   state.cart[tid] = [];
   return true;
@@ -1231,7 +1258,7 @@ function receiptBody(fees, orders, b, svcRate, taxRate){
   const orderSum = orders.reduce((s,l)=>s+l.price*l.qty, 0);
   const orderRows = orders.length
     ? `<div class="bhead ${fees.length?"":"first"}">ご注文<span>${yen(orderSum)}</span></div>
-       ${orders.map(l=>row(l.name, l.price*l.qty, `${yen(l.price)} × ${l.qty}`)).join("")}` : "";
+       ${orders.map(l=>row(l.abbr||l.name, l.price*l.qty, `${yen(l.price)} × ${l.qty}`)).join("")}` : "";
 
   return `<div class="slip">
       ${feeRows}${orderRows}
@@ -1262,7 +1289,7 @@ function viewBills(){
   if(t){
     const b = bill(t);
     const fees = feeLines(t).map(l=>({ name:l.name, note:l.note||"", amount:l.amount }));
-    const orders = allLines(t.id).map(l=>({ name:l.name, price:l.price, qty:l.qty }));
+    const orders = allLines(t.id).map(l=>({ name:l.name, abbr:l.abbr||"", price:l.price, qty:l.qty }));
     const svcRate = state.fees.serviceOn ? state.fees.service : 0;
     const taxRate = state.fees.taxOn ? state.fees.tax : 0;
 
@@ -1283,27 +1310,46 @@ function viewBills(){
     detail = `<div class="empty">現在ご利用中の卓はありません。</div>`;
   }
 
-  /* 会計済みの履歴（新しい順） */
-  const hist = state.billHistory.slice().sort((a,c)=>c.at-a.at).slice(0, 30);
+  /* 会計済みの履歴：売上タブと同じ日付検索（今日／週間／月間／全期間） */
+  if(state.billAuto === undefined) state.billAuto = true;
+  if(!state.billRange) state.billRange = { from: todayStr(), to: todayStr() };
+  if(state.billAuto){
+    const td = todayStr();
+    if(state.billRange.from !== td || state.billRange.to !== td) state.billRange = { from: td, to: td };
+  }
+  const brg = state.billRange;
+  const hist = billsInRange(brg.from, brg.to).sort((a,c)=>(c.at||0)-(a.at||0));
   const histHtml = hist.length
     ? hist.map(h=>{
         const open = state.openBill === h.id;
         return `<div class="grp">
           <button class="grph" data-obill="${h.id}" aria-expanded="${open}">
-            ${new Date(h.at).toLocaleDateString("ja-JP")} ${hhmm(h.at)}　${esc(h.tableName)}${
+            ${new Date(h.at||Date.now()).toLocaleDateString("ja-JP")} ${hhmmJ(h.at||Date.now())}　${esc(h.tableName||"—")}${
               h.customerName?`　${esc(h.customerName)} 様`:""}
-            <b>${yen(h.total)}</b><span class="ar">${open?"▲":"▼"}</span></button>
+            <b>${yen(h.total||0)}</b><span class="ar">${open?"▲":"▼"}</span></button>
           ${open ? `<div class="grpb">${receiptBody(
               h.feeLines||[], h.orderLines||[],
               { sub:h.sub, svc:h.svc, tax:h.tax, total:h.total, isFirst:h.isFirst },
               h.svcRate||0, h.taxRate||0)}</div>` : ""}
         </div>`;
       }).join("")
-    : `<div class="empty">会計済みの伝票はまだありません。</div>`;
+    : `<div class="empty">この期間の会計済み伝票はありません。</div>`;
 
   return `<div class="sec-head" style="margin-top:0"><h2>ご利用中</h2><div class="rule"></div></div>
     ${strip}${detail}
     <div class="sec-head"><h2>会計済み</h2><div class="rule"></div></div>
+    <div class="daterow">
+      <input class="inp" type="date" value="${brg.from}" data-bfrom="1">
+      <span class="dsep">〜</span>
+      <input class="inp" type="date" value="${brg.to}" data-bto="1">
+      <div class="quick">
+        <button data-brange="today" aria-pressed="${brg.from===todayStr()&&brg.to===todayStr()}">今日</button>
+        <button data-brange="week" aria-pressed="${rangeMatches(brg,"week")}">直近7日</button>
+        <button data-brange="month" aria-pressed="${rangeMatches(brg,"month")}">今月</button>
+        <button data-brange="all" aria-pressed="${!brg.from&&!brg.to}">全期間</button>
+      </div>
+    </div>
+    <p class="note" style="margin:-6px 0 14px">${(!brg.from&&!brg.to) ? "現在、全期間を表示しています。" : `現在、<b style="color:var(--gold)">${brg.from===brg.to?brg.from+" のみ":brg.from+" 〜 "+brg.to}</b> を表示しています。`}</p>
     ${histHtml}`;
 }
 
@@ -1372,6 +1418,24 @@ function rangeMatches(rg, kind){
     return rg.from === bizDateOf(d1.getTime()) && rg.to === today;
   }
   return false;
+}
+
+/* 売上タブ・伝票タブ共通：今日／直近7日／今月／全期間のプリセットを state[rangeKey] に反映する。
+   autoKey は「今日」を選んだときだけ自動追従（日付が変わったら勝手に更新）させるためのフラグ。 */
+function applyRangePreset(rangeKey, autoKey, kind){
+  const today = todayStr();
+  const anchor = new Date(today + "T12:00:00");
+  state[autoKey] = (kind === "today");
+  if(kind === "today") state[rangeKey] = { from: today, to: today };
+  else if(kind === "week"){
+    const d7 = new Date(anchor); d7.setDate(d7.getDate()-6);
+    state[rangeKey] = { from: bizDateOf(d7.getTime()), to: today };
+  } else if(kind === "month"){
+    const d1 = new Date(anchor); d1.setDate(1);
+    state[rangeKey] = { from: bizDateOf(d1.getTime()), to: today };
+  } else if(kind === "all"){
+    state[rangeKey] = { from: "", to: "" };
+  }
 }
 
 function viewSales(){
@@ -1784,18 +1848,25 @@ function viewSettings(){
     return `<div class="grp">
       <button class="grph" data-cat="${esc(c)}" aria-expanded="${open}">
         ${esc(c)}<b>${ps.length}</b><span class="ar">${open?"▲":"▼"}</span></button>
-      ${open ? `<div class="grpb" data-draglist="prod:${esc(c)}">${ps.map(p=>`<div class="prow" data-did="${p.id}">
-          <span class="dragh" data-drag="1">⠿</span>
-          <input class="inp nm" value="${esc(p.name)}" data-pname="${p.id}" placeholder="商品名">
-          <div class="prow-b">
-            <span class="yen">¥</span>
-            <input class="inp pr" type="number" inputmode="numeric" min="0" step="100"
-                   value="${p.price}" data-pprice="${p.id}">
-            <select class="inp rl" data-pcat="${p.id}">
-              ${state.categories.map(x=>`<option value="${esc(x)}" ${p.cat===x?"selected":""}>${esc(x)}</option>`).join("")}
-            </select>
-            <button class="tog" data-ptrack="${p.id}" aria-pressed="${p.track}">在庫管理${p.track?"する":"しない"}</button>
-            <button data-pdel="${p.id}" aria-label="削除">✕</button>
+      ${open ? `<div class="grpb" data-draglist="prod:${esc(c)}">${ps.map(p=>`<div class="prow pcard" data-did="${p.id}">
+          <div class="prow-top">
+            <span class="dragh" data-drag="1">⠿</span>
+            <input class="inp nm" value="${esc(p.name)}" data-pname="${p.id}" placeholder="商品名">
+            <button class="del" data-pdel="${p.id}" aria-label="削除">✕</button>
+          </div>
+          <div class="prow-bot">
+            <div class="pfield"><label>売値</label>
+              <div class="pfield-in"><span class="yen">¥</span>
+                <input class="inp pr" type="number" inputmode="numeric" min="0" step="100"
+                       value="${p.price}" data-pprice="${p.id}"></div></div>
+            <div class="pfield"><label>略称（伝票用）</label>
+              <input class="inp ab" value="${esc(p.abbr||"")}" data-pabbr="${p.id}" placeholder="例：ハイボール→ハイ"></div>
+            <div class="pfield"><label>ジャンル</label>
+              <select class="inp rl" data-pcat="${p.id}">
+                ${state.categories.map(x=>`<option value="${esc(x)}" ${p.cat===x?"selected":""}>${esc(x)}</option>`).join("")}
+              </select></div>
+            <div class="pfield"><label>在庫管理</label>
+              <button class="tog wide" data-ptrack="${p.id}" aria-pressed="${p.track}">${p.track?"する":"しない"}</button></div>
           </div></div>`).join("")}
         <button class="add sm" data-addprod="${esc(c)}">＋ ${esc(c)} に商品を追加</button></div>` : ""}
     </div>`;
@@ -2100,7 +2171,7 @@ function sheetBill(tid){
        ${bs.map((b,i)=>`<div class="bhead ${(i===0&&!fl.length)?"first":""}">${
             b.manual?"スタッフ入力":hhmm(b.at)+" の注文"}<span>${yen(batchSum(b))}</span></div>
           ${b.lines.map(l=>`<div class="srow">
-            <div class="sn">${esc(l.name)}<span>${yen(l.price)} × ${l.qty}</span></div>
+            <div class="sn">${esc(l.abbr||l.name)}<span>${yen(l.price)} × ${l.qty}</span></div>
             <div class="ss">${yen(l.price*l.qty)}</div></div>`).join("")}`).join("")}`
     : `<div class="empty" style="margin:0">まだ何も入っていません。</div>`;
 
@@ -2216,7 +2287,7 @@ function renderNewRot(){
 
 /* ========== events ========== */
 document.addEventListener("click", e=>{
-  const el = e.target.closest("[data-resetsales],[data-mcat],[data-newcode],[data-synctest],[data-btab],[data-obill],[data-receipt],[data-srange],[data-ptrack],[data-tcast],[data-persist],[data-firstoff],[data-dfee],[data-sec],[data-cat],[data-catadd],[data-catdel],[data-kdone],[data-kundo],[data-pstock],[data-feeon],[data-feetog],[data-idle],[data-okconfirm],[data-dev],[data-devclose],[data-devset],[data-tcancel],[data-tbus],[data-tstart],[data-thome],[data-ttab],[data-cadd],[data-cqty],[data-confirm],[data-cclear],[data-tbill],[data-key],[data-acct],[data-logout],[data-otab],[data-addacct],[data-adel],[data-tab],[data-filter],[data-table],[data-closesheet],[data-go],[data-guest],[data-new-rot],[data-order],[data-qty],[data-addprod],[data-pdel],[data-goto-rot],[data-next-rot],[data-pause-rot],[data-extend-rot],[data-close-rot],[data-restart-rot],[data-tcount],[data-tset],[data-dmin],[data-addcast],[data-delcast],[data-ctog],[data-deltable],[data-reset],[data-pick],[data-mv],[data-rm],[data-dguest],[data-dmin2],[data-dminset],[data-dper],[data-startrot]");
+  const el = e.target.closest("[data-brange],[data-resetsales],[data-mcat],[data-newcode],[data-synctest],[data-btab],[data-obill],[data-receipt],[data-srange],[data-ptrack],[data-tcast],[data-persist],[data-firstoff],[data-dfee],[data-sec],[data-cat],[data-catadd],[data-catdel],[data-kdone],[data-kundo],[data-pstock],[data-feeon],[data-feetog],[data-idle],[data-okconfirm],[data-dev],[data-devclose],[data-devset],[data-tcancel],[data-tbus],[data-tstart],[data-thome],[data-ttab],[data-cadd],[data-cqty],[data-confirm],[data-cclear],[data-tbill],[data-key],[data-acct],[data-logout],[data-otab],[data-addacct],[data-adel],[data-tab],[data-filter],[data-table],[data-closesheet],[data-go],[data-guest],[data-new-rot],[data-order],[data-qty],[data-addprod],[data-pdel],[data-goto-rot],[data-next-rot],[data-pause-rot],[data-extend-rot],[data-close-rot],[data-restart-rot],[data-tcount],[data-tset],[data-dmin],[data-addcast],[data-delcast],[data-ctog],[data-deltable],[data-reset],[data-pick],[data-mv],[data-rm],[data-dguest],[data-dmin2],[data-dminset],[data-dper],[data-startrot]");
   if(!el){
     if(e.target.dataset && e.target.dataset.sheet) closeSheet();
     return;
@@ -2410,23 +2481,8 @@ document.addEventListener("click", e=>{
   if(d.synctest){ testSync(); return; }
   if(d.newcode){ createStoreCode(); return; }
   if(d.sec){ state.openSecs[d.sec] = !state.openSecs[d.sec]; render(); return; }
-  if(d.srange){
-    if(!state.salesRange) state.salesRange = { from: todayStr(), to: todayStr() };
-    const today = todayStr();                          // 営業日基準の「今日」
-    const anchor = new Date(today + "T12:00:00");       // 起点はその営業日の昼（日またぎ計算のズレ防止）
-    state.salesAuto = (d.srange === "today");           // 今日以外を選んだら自動追従を止める
-    if(d.srange === "today") state.salesRange = { from: today, to: today };
-    else if(d.srange === "week"){
-      const d7 = new Date(anchor); d7.setDate(d7.getDate()-6);
-      state.salesRange = { from: bizDateOf(d7.getTime()), to: today };
-    } else if(d.srange === "month"){
-      const d1 = new Date(anchor); d1.setDate(1);
-      state.salesRange = { from: bizDateOf(d1.getTime()), to: today };
-    } else if(d.srange === "all"){
-      state.salesRange = { from: "", to: "" };
-    }
-    render(); return;
-  }
+  if(d.srange){ applyRangePreset("salesRange", "salesAuto", d.srange); render(); return; }
+  if(d.brange){ applyRangePreset("billRange", "billAuto", d.brange); render(); return; }
   if(d.cat){ state.openCats[d.cat] = !state.openCats[d.cat]; render(); return; }
   if(d.catadd){
     const n = newCat.trim();
@@ -2554,7 +2610,7 @@ function commitSoft(){                     // 入力中は再描画せず配信�
 }
 document.addEventListener("input", e=>{
   const t = e.target;
-  if(t.dataset && (t.dataset.pname||t.dataset.pprice||t.dataset.tname||t.dataset.cname||
+  if(t.dataset && (t.dataset.pname||t.dataset.pprice||t.dataset.pabbr||t.dataset.tname||t.dataset.cname||
      t.dataset.fee||t.dataset.pstocknum||t.dataset.catname||t.dataset.aname||t.dataset.apin||
      t.dataset.cust||t.dataset.logoutpw)) commitSoft();
   if(t.dataset.logoutpin){
@@ -2593,6 +2649,7 @@ document.addEventListener("input", e=>{
   }
   if(t.dataset.cname){ const c=state.casts.find(x=>x.id===t.dataset.cname); if(c) c.name=t.value; return; }
   if(t.dataset.pname){ const p=prodOf(t.dataset.pname); if(p) p.name=t.value; return; }
+  if(t.dataset.pabbr){ const p=prodOf(t.dataset.pabbr); if(p) p.abbr=t.value; return; }
   if(t.dataset.pprice){
     const p=prodOf(t.dataset.pprice);
     if(p) p.price = Math.max(0, parseInt(t.value,10) || 0);
@@ -2649,6 +2706,14 @@ document.addEventListener("change", e=>{
     if(!state.salesRange) state.salesRange = { from: todayStr(), to: todayStr() };
     state.salesRange.to = e.target.value; state.salesAuto = false; render(); return;
   }
+  if(e.target.dataset.bfrom !== undefined){
+    if(!state.billRange) state.billRange = { from: todayStr(), to: todayStr() };
+    state.billRange.from = e.target.value; state.billAuto = false; render(); return;
+  }
+  if(e.target.dataset.bto !== undefined){
+    if(!state.billRange) state.billRange = { from: todayStr(), to: todayStr() };
+    state.billRange.to = e.target.value; state.billAuto = false; render(); return;
+  }
   if(e.target.dataset.pcat || e.target.dataset.arole) commitSoft();
   if(e.target.dataset.dtable){ draft.tableId = e.target.value; }
   if(e.target.dataset.pcat){
@@ -2696,7 +2761,7 @@ function go(t, k){
       taxRate: state.fees.taxOn ? state.fees.tax : 0,
       orderCount: orderCount(t.id),
       feeLines: feeLines(t).map(l=>({ name:l.name, note:l.note||"", amount:l.amount })),
-      orderLines: allLines(t.id).map(l=>({ name:l.name, price:l.price, qty:l.qty }))
+      orderLines: allLines(t.id).map(l=>({ name:l.name, abbr:l.abbr||"", price:l.price, qty:l.qty }))
     });
   }
   if(k === "empty"){
@@ -3317,10 +3382,14 @@ function tick(){
   const now = new Date();
   $("#clock").textContent = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
 
-  /* 売上タブを開きっぱなしでも、営業日が変わった瞬間に「今日」を追従させる */
+  /* 売上タブ・伝票タブを開きっぱなしでも、営業日が変わった瞬間に「今日」を追従させる */
   if(state.session && state.tab === "sales" && (state.salesAuto === undefined || state.salesAuto)){
     const t = todayStr();
     if(!state.salesRange || state.salesRange.to !== t){ render(); return; }
+  }
+  if(state.session && state.tab === "bill" && (state.billAuto === undefined || state.billAuto)){
+    const t = todayStr();
+    if(!state.billRange || state.billRange.to !== t){ render(); return; }
   }
 
   /* 新しいオーダーが入ったら厨房画面を更新する */
