@@ -982,6 +982,8 @@ function fmt(ms){
   return (neg?"+":"") + (h>0 ? `${h}:${p(m)}:${p(x)}` : `${m}:${p(x)}`);
 }
 function hhmm(ts){ const d=new Date(ts); return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; }
+/* 売上タブ用：「0時15分」のような日本語表記（コロン表記が必要なタイマー等はhhmmのまま） */
+function hhmmJ(ts){ const d=new Date(ts); return `${d.getHours()}時${String(d.getMinutes()).padStart(2,"0")}分`; }
 
 function toast(msg){
   const old = document.querySelector(".toast"); if(old) old.remove();
@@ -1305,15 +1307,33 @@ function viewBills(){
 }
 
 /* ---- 売上（日付検索・キャスト別集計） ---- */
-function billsInRange(fromStr, toStr){
-  const from = fromStr ? new Date(fromStr + "T00:00:00").getTime() : -Infinity;
-  const to   = toStr   ? new Date(toStr   + "T23:59:59").getTime() :  Infinity;
-  return state.billHistory.filter(b => b.at >= from && b.at <= to);
+/* ---- 営業日（深夜3時までは「前日の営業日」として扱う）----
+   ホスト・ホステス業態は日をまたいで営業するため、入店時刻をもとに
+   「その来店がどの日の売上か」を決める。3時0分より前の入店は前日扱い。 */
+const BIZ_CUTOFF_HOUR = 3;
+function bizDateOf(ts){
+  const d = new Date(ts || Date.now());
+  if(d.getHours() < BIZ_CUTOFF_HOUR) d.setDate(d.getDate() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
+function bizToday(){ return bizDateOf(Date.now()); }
+
 /* 集計に使う金額は「サービス料・消費税を含まない」もの。
    ＝ SET料金（または初回料金）＋ 指名料 ＋ 同伴料 ＋ 商品（ドリンク等）の合計。
-   billHistory の b.sub がこれに当たる（bill() 内で svc・tax を足す前の値）。 */
-const netOf = b => (b.sub != null ? b.sub : b.total);
+   billHistory の b.sub がこれに当たる（bill() 内で svc・tax を足す前の値）。
+   古いバージョンで作られた伝票には無いことがあるので、無ければ total で代用する。 */
+const netOf = b => (b && b.sub != null ? b.sub : (b ? (b.total || 0) : 0));
+
+/* 入店時刻（無ければ会計時刻）をもとに営業日で絞り込む */
+function billsInRange(fromStr, toStr){
+  return (state.billHistory || []).filter(b=>{
+    if(!b) return false;
+    const bd = bizDateOf(b.seatedAt || b.billedAt || b.at);
+    if(fromStr && bd < fromStr) return false;
+    if(toStr && bd > toStr) return false;
+    return true;
+  });
+}
 
 function castStats(bills){
   const map = {};
@@ -1321,7 +1341,10 @@ function castStats(bills){
   state.casts.forEach(c=>{ map[c.name] = { name:c.name, count:0, nom:0, douhan:0, total:0, active:c.active }; });
 
   bills.forEach(b=>{
-    (b.casts.length ? b.casts : ["（担当なし）"]).forEach(name=>{
+    if(!b) return;
+    if(b.isFirst) return;   // 初回料金はお店の売上のみに計上し、送り指名の個人成績には付けない
+    const casts = Array.isArray(b.casts) ? b.casts : [];
+    (casts.length ? casts : ["（担当なし）"]).forEach(name=>{
       if(!map[name]) map[name] = { name, count:0, nom:0, douhan:0, total:0, active:true };
       const m = map[name];
       m.count++;
@@ -1333,12 +1356,12 @@ function castStats(bills){
   // 金額の高い順。同額なら本数が多い方を上に、それも同じなら名前順で安定させる
   return Object.values(map).sort((a,b)=> b.total - a.total || b.count - a.count || a.name.localeCompare(b.name,"ja"));
 }
-function todayStr(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
+function todayStr(){ return bizToday(); }   // 「今日」は営業日基準（深夜3時まで前日扱い）
 
 function viewSales(){
   if(!state.salesRange) state.salesRange = { from: todayStr(), to: todayStr() };
   const rg = state.salesRange;
-  const bills = billsInRange(rg.from, rg.to).sort((a,b)=>b.at-a.at);
+  const bills = billsInRange(rg.from, rg.to).sort((a,b)=>(b.at||0)-(a.at||0));
   const grand = bills.reduce((s,b)=>s+netOf(b), 0);   // サービス料・消費税を含まない総売上
   const nomCount = bills.filter(b=>b.nom).length, douhanCount = bills.filter(b=>b.douhan).length;
   const cs = castStats(bills);
@@ -1355,9 +1378,10 @@ function viewSales(){
         <button data-srange="all">全期間</button>
       </div>
     </div>
+    <p class="note" style="margin:-6px 0 14px">営業日は入店時刻で判定します。深夜3時（0時〜2時台）までの入店は前日の売上として計上します。</p>
 
     <div class="gtotal"><span>総売上（${bills.length}組）</span><b>${yen(grand)}</b></div>
-    <p class="note" style="margin:-8px 0 12px">サービス料・消費税を含まない金額です（SET・指名料・同伴料・商品の合計）。</p>
+    <p class="note" style="margin:-8px 0 12px">サービス料・消費税を含まない金額です（SET・指名料・同伴料・商品の合計）。初回料金はお店の売上に含み、送り指名の個人成績には計上しません。</p>
     <div class="summary" style="margin:-2px 0 14px">
       <span class="chip"><span class="n">${nomCount}</span>本 指名</span>
       <span class="chip"><span class="n">${douhanCount}</span>本 同伴</span>
@@ -1374,12 +1398,15 @@ function viewSales(){
       </div>` : `<div class="empty">キャストが登録されていません。</div>`}
 
     <div class="sec-head"><h2>会計履歴</h2><div class="rule"></div></div>
-    ${bills.length ? bills.map(b=>`<div class="hbatch">
-        <div class="hh">${new Date(b.at).toLocaleDateString("ja-JP")} ${hhmm(b.at)}　${esc(b.tableName)}${
+    ${bills.length ? bills.map(b=>{
+        const casts = Array.isArray(b.casts) ? b.casts : [];
+        return `<div class="hbatch">
+        <div class="hh">${new Date(b.at||Date.now()).toLocaleDateString("ja-JP")} ${hhmmJ(b.at||Date.now())}　${esc(b.tableName||"—")}${
           b.customerName?`　${esc(b.customerName)} 様`:""}<span class="amt">${yen(netOf(b))}</span></div>
-        <div class="hline"><span class="n">${b.guests}名${b.isFirst?"・初回":""}${b.nom?"・指名":""}${b.douhan?"・同伴":""}${
-          b.casts.length?"・"+esc(b.casts.join("／")):""}</span></div>
-      </div>`).join("") : `<div class="empty">まだ会計はありません。</div>`}`;
+        <div class="hline"><span class="n">${b.guests||0}名${b.isFirst?"・初回":""}${b.nom?"・指名":""}${b.douhan?"・同伴":""}${
+          casts.length?"・"+esc(casts.join("／")):""}</span></div>
+      </div>`;
+      }).join("") : `<div class="empty">まだ会計はありません。</div>`}`;
 }
 
 /* ---- 厨房：オーダー通知 ---- */
@@ -2339,14 +2366,15 @@ document.addEventListener("click", e=>{
   if(d.sec){ state.openSecs[d.sec] = !state.openSecs[d.sec]; render(); return; }
   if(d.srange){
     if(!state.salesRange) state.salesRange = { from: todayStr(), to: todayStr() };
-    const today = todayStr();
+    const today = todayStr();                          // 営業日基準の「今日」
+    const anchor = new Date(today + "T12:00:00");       // 起点はその営業日の昼（日またぎ計算のズレ防止）
     if(d.srange === "today") state.salesRange = { from: today, to: today };
     else if(d.srange === "week"){
-      const d7 = new Date(); d7.setDate(d7.getDate()-6);
-      state.salesRange = { from: d7.toISOString().slice(0,10), to: today };
+      const d7 = new Date(anchor); d7.setDate(d7.getDate()-6);
+      state.salesRange = { from: bizDateOf(d7.getTime()), to: today };
     } else if(d.srange === "month"){
-      const d1 = new Date(); d1.setDate(1);
-      state.salesRange = { from: d1.toISOString().slice(0,10), to: today };
+      const d1 = new Date(anchor); d1.setDate(1);
+      state.salesRange = { from: bizDateOf(d1.getTime()), to: today };
     } else if(d.srange === "all"){
       state.salesRange = { from: "", to: "" };
     }
