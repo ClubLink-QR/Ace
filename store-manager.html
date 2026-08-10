@@ -146,6 +146,7 @@ main{max-width:1280px;margin:0 auto;padding:14px}
 .chip[aria-pressed="true"]{border-color:var(--gold);color:var(--text)}
 .chip .dot{width:8px;height:8px;border-radius:50%;background:currentColor}
 .chip .n{font-family:var(--mono);font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
+.chip .sub{font-style:normal;color:var(--gold);font-weight:600}
 .d-empty{color:var(--st-empty)} .d-serving{color:var(--st-serving)}
 .d-billing{color:var(--st-billing)} .d-closed{color:var(--st-closed)}
 
@@ -1358,12 +1359,38 @@ function castStats(bills){
 }
 function todayStr(){ return bizToday(); }   // 「今日」は営業日基準（深夜3時まで前日扱い）
 
+/* 今どのクイックボタンが選ばれているかを見た目で示すための判定 */
+function rangeMatches(rg, kind){
+  const today = todayStr();
+  const anchor = new Date(today + "T12:00:00");
+  if(kind === "week"){
+    const d7 = new Date(anchor); d7.setDate(d7.getDate()-6);
+    return rg.from === bizDateOf(d7.getTime()) && rg.to === today;
+  }
+  if(kind === "month"){
+    const d1 = new Date(anchor); d1.setDate(1);
+    return rg.from === bizDateOf(d1.getTime()) && rg.to === today;
+  }
+  return false;
+}
+
 function viewSales(){
+  /* 「今日」を自動で最新の営業日に追従させる。
+     開きっぱなしのタブで日をまたいでも、次に描画されたタイミングで
+     ちゃんと新しい日の「今日」に切り替わるようにする（週間・月間・自分で日付を
+     選んだ場合は salesAuto=false になり、追従を止める）。 */
+  if(state.salesAuto === undefined) state.salesAuto = true;
   if(!state.salesRange) state.salesRange = { from: todayStr(), to: todayStr() };
+  if(state.salesAuto){
+    const t = todayStr();
+    if(state.salesRange.from !== t || state.salesRange.to !== t) state.salesRange = { from: t, to: t };
+  }
   const rg = state.salesRange;
   const bills = billsInRange(rg.from, rg.to).sort((a,b)=>(b.at||0)-(a.at||0));
   const grand = bills.reduce((s,b)=>s+netOf(b), 0);   // サービス料・消費税を含まない総売上
   const nomCount = bills.filter(b=>b.nom).length, douhanCount = bills.filter(b=>b.douhan).length;
+  const firstBills = bills.filter(b=>b.isFirst);
+  const firstGuests = firstBills.reduce((s,b)=>s+(b.guests||0), 0);
   const cs = castStats(bills);
 
   return `<div class="sec-head" style="margin-top:0"><h2>売上</h2><div class="rule"></div></div>
@@ -1372,20 +1399,21 @@ function viewSales(){
       <span class="dsep">〜</span>
       <input class="inp" type="date" value="${rg.to}" data-sto="1">
       <div class="quick">
-        <button data-srange="today">今日</button>
-        <button data-srange="week">直近7日</button>
-        <button data-srange="month">今月</button>
-        <button data-srange="all">全期間</button>
+        <button data-srange="today" aria-pressed="${rg.from===todayStr()&&rg.to===todayStr()}">今日</button>
+        <button data-srange="week" aria-pressed="${rangeMatches(rg,"week")}">直近7日</button>
+        <button data-srange="month" aria-pressed="${rangeMatches(rg,"month")}">今月</button>
+        <button data-srange="all" aria-pressed="${!rg.from&&!rg.to}">全期間</button>
       </div>
     </div>
-    <p class="note" style="margin:-6px 0 14px">営業日は入店時刻で判定します。深夜3時（0時〜2時台）までの入店は前日の売上として計上します。</p>
+    <p class="note" style="margin:-6px 0 14px">${(!rg.from&&!rg.to) ? "現在、全期間を表示しています。" : `現在、<b style="color:var(--gold)">${rg.from===rg.to?rg.from+" のみ":rg.from+" 〜 "+rg.to}</b> を表示しています。`}
+      営業日は入店時刻で判定します（深夜3時までの入店は前日の売上）。</p>
 
     <div class="gtotal"><span>総売上（${bills.length}組）</span><b>${yen(grand)}</b></div>
     <p class="note" style="margin:-8px 0 12px">サービス料・消費税を含まない金額です（SET・指名料・同伴料・商品の合計）。初回料金はお店の売上に含み、送り指名の個人成績には計上しません。</p>
     <div class="summary" style="margin:-2px 0 14px">
-      <span class="chip"><span class="n">${nomCount}</span>本 指名</span>
+      <span class="chip"><span class="n">${nomCount + firstGuests}</span>本 指名</span>
       <span class="chip"><span class="n">${douhanCount}</span>本 同伴</span>
-      <span class="chip"><span class="n">${bills.filter(b=>b.isFirst).length}</span>組 初回</span>
+      <span class="chip"><span class="n">${firstBills.length}</span>組 初回</span>
     </div>
 
     <div class="sec-head"><h2>キャスト別</h2><div class="rule"></div></div>
@@ -1396,6 +1424,17 @@ function viewSales(){
           <span>${c.nom||"—"}</span><span>${c.douhan||"—"}</span>
           <span class="amt">${yen(c.total)}</span></div>`).join("")}
       </div>` : `<div class="empty">キャストが登録されていません。</div>`}
+
+    <div class="sec-head"><h2>初回（お店の売上）</h2><div class="rule"></div></div>
+    ${firstBills.length ? `<div class="castable">
+          <div class="ctr ch" style="grid-template-columns:1fr 1fr 1fr"><span>組数</span><span>人数</span><span>金額</span></div>
+          <div class="ctr" style="grid-template-columns:1fr 1fr 1fr">
+            <span>${firstBills.length}組</span>
+            <span>${firstGuests}名</span>
+            <span class="amt">${yen(firstBills.reduce((s,b)=>s+netOf(b),0))}</span></div>
+        </div>
+        <p class="note" style="margin-top:6px">送り指名についたキャストの個人成績には含めていません。店舗全体の売上としてのみ計上しています。</p>`
+      : `<div class="empty">この期間の初回はありません。</div>`}
 
     <div class="sec-head"><h2>会計履歴</h2><div class="rule"></div></div>
     ${bills.length ? bills.map(b=>{
@@ -1921,7 +1960,14 @@ function viewSettings(){
     <div class="sync ${PERSIST?"":"off"}" style="opacity:.65"><span class="dot"></span>
       参考：この端末への保存 ${PERSIST ? "有効" : "無効"}</div>
 
-    <button class="btn dan wide" style="margin-top:14px" data-reset="1">すべてリセット</button>`)}
+    <div class="sec-head" style="margin-top:18px"><h2>リセット</h2><div class="rule"></div></div>
+    <button class="btn wide" data-reset="1">営業リセット（卓・注文・初回回し）</button>
+    <p class="note" style="margin:6px 0 14px">卓の状態・注文・伝票・初回回しを空にします。商品・キャスト・アカウント・売上データは残ります。</p>
+
+    <button class="btn dan wide" data-resetsales="1">売上データを消去</button>
+    <p class="note" style="margin:6px 0 14px">これまでの会計履歴（売上タブの集計・キャスト別成績）をすべて消します。テスト運用中の数字を消してから本番を始めたいときに使います。</p>
+
+`)}
   `;
 }
 
@@ -2170,7 +2216,7 @@ function renderNewRot(){
 
 /* ========== events ========== */
 document.addEventListener("click", e=>{
-  const el = e.target.closest("[data-mcat],[data-newcode],[data-synctest],[data-btab],[data-obill],[data-receipt],[data-srange],[data-ptrack],[data-tcast],[data-persist],[data-firstoff],[data-dfee],[data-sec],[data-cat],[data-catadd],[data-catdel],[data-kdone],[data-kundo],[data-pstock],[data-feeon],[data-feetog],[data-idle],[data-okconfirm],[data-dev],[data-devclose],[data-devset],[data-tcancel],[data-tbus],[data-tstart],[data-thome],[data-ttab],[data-cadd],[data-cqty],[data-confirm],[data-cclear],[data-tbill],[data-key],[data-acct],[data-logout],[data-otab],[data-addacct],[data-adel],[data-tab],[data-filter],[data-table],[data-closesheet],[data-go],[data-guest],[data-new-rot],[data-order],[data-qty],[data-addprod],[data-pdel],[data-goto-rot],[data-next-rot],[data-pause-rot],[data-extend-rot],[data-close-rot],[data-restart-rot],[data-tcount],[data-tset],[data-dmin],[data-addcast],[data-delcast],[data-ctog],[data-deltable],[data-reset],[data-pick],[data-mv],[data-rm],[data-dguest],[data-dmin2],[data-dminset],[data-dper],[data-startrot]");
+  const el = e.target.closest("[data-resetsales],[data-mcat],[data-newcode],[data-synctest],[data-btab],[data-obill],[data-receipt],[data-srange],[data-ptrack],[data-tcast],[data-persist],[data-firstoff],[data-dfee],[data-sec],[data-cat],[data-catadd],[data-catdel],[data-kdone],[data-kundo],[data-pstock],[data-feeon],[data-feetog],[data-idle],[data-okconfirm],[data-dev],[data-devclose],[data-devset],[data-tcancel],[data-tbus],[data-tstart],[data-thome],[data-ttab],[data-cadd],[data-cqty],[data-confirm],[data-cclear],[data-tbill],[data-key],[data-acct],[data-logout],[data-otab],[data-addacct],[data-adel],[data-tab],[data-filter],[data-table],[data-closesheet],[data-go],[data-guest],[data-new-rot],[data-order],[data-qty],[data-addprod],[data-pdel],[data-goto-rot],[data-next-rot],[data-pause-rot],[data-extend-rot],[data-close-rot],[data-restart-rot],[data-tcount],[data-tset],[data-dmin],[data-addcast],[data-delcast],[data-ctog],[data-deltable],[data-reset],[data-pick],[data-mv],[data-rm],[data-dguest],[data-dmin2],[data-dminset],[data-dper],[data-startrot]");
   if(!el){
     if(e.target.dataset && e.target.dataset.sheet) closeSheet();
     return;
@@ -2368,6 +2414,7 @@ document.addEventListener("click", e=>{
     if(!state.salesRange) state.salesRange = { from: todayStr(), to: todayStr() };
     const today = todayStr();                          // 営業日基準の「今日」
     const anchor = new Date(today + "T12:00:00");       // 起点はその営業日の昼（日またぎ計算のズレ防止）
+    state.salesAuto = (d.srange === "today");           // 今日以外を選んだら自動追従を止める
     if(d.srange === "today") state.salesRange = { from: today, to: today };
     else if(d.srange === "week"){
       const d7 = new Date(anchor); d7.setDate(d7.getDate()-6);
@@ -2476,13 +2523,25 @@ document.addEventListener("click", e=>{
     state.tables = state.tables.filter(x=>x.id!==d.deltable); commit(); return;
   }
   if(d.reset){
-    askConfirm({ title:"すべて初期化しますか？", ok:"初期化する", danger:true,
-      msg:"テーブルの状態・伝票・初回回しがすべてリセットされます。商品と アカウントは残ります。",
+    askConfirm({ title:"営業リセットしますか？", ok:"リセットする", danger:true,
+      msg:"テーブルの状態・伝票・初回回しがすべて空になります。商品・キャスト・アカウント・売上データは残ります。",
       run:()=>{
-        state.tables.forEach(t=>{ t.status="empty"; t.guests=0; t.seatedAt=null; t.statusSince=Date.now(); });
-        state.rotations = []; state.orders = {}; state.cart = {}; state.orderTable = null;
+        state.tables.forEach(t=>{
+          t.status="empty"; t.guests=0; t.seatedAt=null; t.billedAt=null; t.firstFee=null;
+          t.casts=[]; t.customerName=""; t.fees={ set:true, nom:true, douhan:false }; t.statusSince=Date.now();
+        });
+        state.rotations = []; state.orders = {}; state.cart = {}; state.orderTable = null; state.billTable = null;
         state.term = { stage:"idle", tab:"menu", cat:"*" };
-        commit(); toast("初期化しました");
+        commit(); toast("営業リセットしました");
+      } });
+    return;
+  }
+  if(d.resetsales){
+    askConfirm({ title:"売上データを消去しますか？", ok:"消去する", danger:true,
+      msg:"これまでの会計履歴（売上タブの集計・キャスト別成績）が<b>すべて</b>消えます。元に戻せません。",
+      run:()=>{
+        state.billHistory = []; state.salesRange = { from: todayStr(), to: todayStr() };
+        commit(); toast("売上データを消去しました");
       } });
     return;
   }
@@ -2584,11 +2643,11 @@ document.addEventListener("change", e=>{
   }
   if(e.target.dataset.sfrom !== undefined){
     if(!state.salesRange) state.salesRange = { from: todayStr(), to: todayStr() };
-    state.salesRange.from = e.target.value; render(); return;
+    state.salesRange.from = e.target.value; state.salesAuto = false; render(); return;
   }
   if(e.target.dataset.sto !== undefined){
     if(!state.salesRange) state.salesRange = { from: todayStr(), to: todayStr() };
-    state.salesRange.to = e.target.value; render(); return;
+    state.salesRange.to = e.target.value; state.salesAuto = false; render(); return;
   }
   if(e.target.dataset.pcat || e.target.dataset.arole) commitSoft();
   if(e.target.dataset.dtable){ draft.tableId = e.target.value; }
@@ -3257,6 +3316,12 @@ function resetIdle(){
 function tick(){
   const now = new Date();
   $("#clock").textContent = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
+
+  /* 売上タブを開きっぱなしでも、営業日が変わった瞬間に「今日」を追従させる */
+  if(state.session && state.tab === "sales" && (state.salesAuto === undefined || state.salesAuto)){
+    const t = todayStr();
+    if(!state.salesRange || state.salesRange.to !== t){ render(); return; }
+  }
 
   /* 新しいオーダーが入ったら厨房画面を更新する */
   if(state.session && state.rev !== lastRev &&
