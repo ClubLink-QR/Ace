@@ -413,6 +413,7 @@ body.login main{max-width:none;padding:0}
 /* 商品一覧だけは詰め込みすぎず、2段のカード形式でゆったり表示する
    （在庫管理ボタンなどが窮屈にならないように） */
 .prow.pcard{display:block;padding:13px 14px;border-radius:12px;margin-bottom:11px}
+.setrow.pcard{display:block;padding:13px 14px;border-radius:12px}
 .pcard .prow-top{display:flex;align-items:center;gap:10px;margin-bottom:13px}
 .pcard .nm{flex:1;min-width:0;background:transparent;border:0;border-bottom:1px solid transparent;
   padding:7px 2px;font-size:16px;font-weight:600;color:var(--text)}
@@ -571,16 +572,12 @@ body.login main{max-width:none;padding:0}
 .dragh{flex:0 0 auto;padding:8px 9px;margin:-4px 0;color:var(--muted);font-size:17px;
   cursor:grab;touch-action:none;-webkit-user-select:none;user-select:none;line-height:1}
 .dragh:active{cursor:grabbing;color:var(--gold)}
-/* つかんでいる行：持ち上がって見えるようにする。並び直り自体は insertBefore で
-   即座に起きるので、まわりの行は JS 側で FLIP アニメーションを掛けて滑らかに追従させる */
 .prow,.setrow{transition:transform .16s ease,box-shadow .16s ease}
 .prow.dragging,.setrow.dragging{
   position:relative;z-index:30;background:var(--surface2);
   box-shadow:0 14px 30px rgba(0,0,0,.5),0 0 0 1px rgba(215,178,109,.5);
   transform:scale(1.025);
 }
-.dragh.pulse{animation:handlePulse .5s ease}
-@keyframes handlePulse{0%{color:var(--gold);transform:scale(1.3)}100%{color:var(--muted);transform:scale(1)}}
 .drag-ghost{position:fixed;left:0;top:0;z-index:200;pointer-events:none;
   background:var(--surface2);border:1px solid var(--gold);border-radius:10px;
   padding:10px 12px;font-size:14px;font-weight:600;box-shadow:0 10px 26px rgba(0,0,0,.5);
@@ -602,7 +599,7 @@ body.login main{max-width:none;padding:0}
 .dsep{color:var(--muted);font-size:13px}
 .castable{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
   padding:4px 12px;margin-bottom:4px}
-.ctr{display:grid;grid-template-columns:1.6fr .7fr .7fr .7fr 1.1fr;gap:6px;align-items:center;
+.ctr{display:grid;grid-template-columns:1.6fr .7fr .7fr 1.1fr;gap:6px;align-items:center;
   padding:10px 0;border-bottom:1px solid var(--line);font-size:13.5px}
 .ctr:last-child{border-bottom:0}
 .ctr.ch{font-size:10.5px;letter-spacing:.08em;color:var(--muted);font-weight:700;padding:9px 0 8px}
@@ -675,6 +672,8 @@ body.login main{max-width:none;padding:0}
 .strow .sctl button:active{background:var(--surface)}
 .strow .stk{width:64px;height:38px;text-align:center;font-size:15px;background:var(--surface2);
   border:1px solid var(--line);border-radius:9px}
+.strow .stk.add{width:56px}
+.strow .sctl .tog{height:38px;padding:0 13px;flex:0 0 auto}
 .strow .slab{font-size:12.5px}
 .sync{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);
   background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-bottom:10px}
@@ -784,7 +783,8 @@ const ORDER = ["empty","serving","billing","closed"];
 
 function mkTable(n){
   return { id:uid(), name:String(n), status:"empty", guests:0, statusSince:Date.now(),
-           seatedAt:null, billedAt:null, firstFee:null, casts:[], customerName:"",
+           seatedAt:null, billedAt:null, firstFee:null, okuriFee:null, okuriStartedAt:null, okuriSwitchedAt:null,
+           casts:[], customerName:"",
            fees:{ set:true, nom:true, douhan:false } };
 }
 /* 権限：注文専用 / 厨房 / ホール / 管理者 */
@@ -830,6 +830,7 @@ const state = {
     douhan:1000,       // 同伴料
     firstHigh:1000,     // 初回料金（高いほう）
     firstLow:0,         // 初回料金（低いほう）
+    okuriSet:2000,      // 飲み直し（送り後に続けて飲む場合）のSET料金。指名料・サービス料・消費税は通常どおり
     service:10, serviceOn:true,   // サービス料（％）
     tax:10,     taxOn:true        // 消費税（％）
   },
@@ -931,11 +932,28 @@ function setQty(tid, lid, dv){
 /* ---- 料金（入店時刻から自動計算。会計を押した時点で止まる） ---- */
 const stayEnd = t => t.billedAt || Date.now();
 const stayHours = t => t.seatedAt ? Math.floor((stayEnd(t) - t.seatedAt) / 3600000) : 0;
+
+/* 通常のセット料金を数え始める起点。
+   飲み直しから「通常料金に切り替え」した卓は、その切り替え時刻から数え直す
+   （飲み直しの1時間ぶんは別枠で残り、そこに上乗せされる形になる）。 */
+const setStartAt = t => t.okuriSwitchedAt || t.seatedAt;
+const setHours = t => setStartAt(t) ? Math.floor((stayEnd(t) - setStartAt(t)) / 3600000) : 0;
 function setFee(t){
-  if(!t.seatedAt) return 0;
-  return Math.min(state.fees.setBase + stayHours(t) * state.fees.setStep, state.fees.setCap);
+  if(!setStartAt(t)) return 0;
+  return Math.min(state.fees.setBase + setHours(t) * state.fees.setStep, state.fees.setCap);
 }
-const isFreeTime = t => t.seatedAt && setFee(t) >= state.fees.setCap;
+const isFreeTime = t => setStartAt(t) && setFee(t) >= state.fees.setCap;
+
+/* 飲み直しのSET料金：最初の1時間はSET（飲み直し）の額のみ。
+   1時間を過ぎたら、そこからは「いつもの時間制セット」と同じ刻みで増える分を
+   その上に上乗せする（上乗せ分自体はフリータイム上限で頭打ち）。 */
+function okuriHours(t){
+  if(!t.okuriStartedAt) return 0;
+  return Math.floor((Date.now() - t.okuriStartedAt) / 3600000);
+}
+function okuriFeeAmount(t){
+  return state.fees.okuriSet || 0;   // 飲み直しは1時間限定の固定額。1時間を過ぎても追加のSETは付けない
+}
 
 function feeLines(t){
   if(!t.seatedAt) return [];
@@ -944,9 +962,19 @@ function feeLines(t){
     const n = Math.max(1, t.guests || 1);
     out.push({ key:"first", name:"初回料金", amount:t.firstFee * n,
                note:`${yen(t.firstFee)} × ${n}名` });
+  } else {
+    /* 飲み直しのSETと通常のセット料金は同時に並ぶことがある。
+       「通常料金に切り替え」したあとは、飲み直しの1時間ぶんはそのまま残り、
+       そこに通常のセット料金が上乗せされる。 */
+    if(t.okuriFee !== null && t.okuriFee !== undefined){
+      out.push({ key:"okuriset", name:"SET（飲み直し）", amount:okuriFeeAmount(t),
+                 note:"1時間ぶん" });
+    }
+    if(t.fees.set){
+      out.push({ key:"set", name:"セット料金", amount:setFee(t),
+        note: isFreeTime(t) ? "フリータイム" : (setHours(t) ? `${setHours(t)}時間経過` : "1時間以内") });
+    }
   }
-  if(t.fees.set) out.push({ key:"set", name:"セット料金", amount:setFee(t),
-    note: isFreeTime(t) ? "フリータイム" : (stayHours(t) ? `${stayHours(t)}時間経過` : "1時間以内") });
   if(t.fees.nom)    out.push({ key:"nom",    name:"指名料", amount:state.fees.nom });
   if(t.fees.douhan) out.push({ key:"douhan", name:"同伴料", amount:state.fees.douhan });
   return out;
@@ -1198,8 +1226,9 @@ function rotCard(r){
         <div class="nm" style="font-size:26px">回し終了</div></div></div>
       <div class="track">${track}</div>
       <div class="rot-acts">
-        <button class="btn pri" data-close-rot="${r.id}">閉じる</button>
+        <button class="btn gh" data-okuri="${r.id}">送り</button>
         <button class="btn gh" data-restart-rot="${r.id}">もう一周する</button>
+        <button class="btn pri" style="margin-left:auto" data-close-rot="${r.id}">閉じる</button>
       </div>
       <div class="rot-list">${lines}</div></div>`;
   }
@@ -1434,6 +1463,19 @@ function castStats(bills){
   // 金額の高い順。同額なら本数が多い方を上に、それも同じなら名前順で安定させる
   return Object.values(map).sort((a,b)=> b.total - a.total || b.count - a.count || a.name.localeCompare(b.name,"ja"));
 }
+
+/* 総売上に含めるかどうか。
+   その伝票に付いたキャストが「総計に含めない」設定の人だけの場合は、
+   個人の成績には残しつつ、店舗全体の総売上からは外す。
+   1人でも「総計に含める」キャストが付いていれば、通常どおり含める。 */
+function countsTowardTotal(b){
+  const casts = Array.isArray(b.casts) ? b.casts : [];
+  if(!casts.length) return true;
+  return casts.some(name=>{
+    const c = state.casts.find(x=>x.name===name);
+    return !c || c.countTotal !== false;
+  });
+}
 function todayStr(){ return bizToday(); }   // 「今日」は営業日基準（深夜3時まで前日扱い）
 
 /* 今どのクイックボタンが選ばれているかを見た目で示すための判定 */
@@ -1482,7 +1524,7 @@ function viewSales(){
   }
   const rg = state.salesRange;
   const bills = billsInRange(rg.from, rg.to).sort((a,b)=>(b.at||0)-(a.at||0));
-  const grand = bills.reduce((s,b)=>s+netOf(b), 0);   // サービス料・消費税を含まない総売上
+  const grand = bills.filter(countsTowardTotal).reduce((s,b)=>s+netOf(b), 0);   // サービス料・消費税を含まない総売上
   const nomCount = bills.filter(b=>b.nom).length, douhanCount = bills.filter(b=>b.douhan).length;
   const firstBills = bills.filter(b=>b.isFirst);
   const firstGuests = firstBills.reduce((s,b)=>s+(b.guests||0), 0);
@@ -1513,9 +1555,9 @@ function viewSales(){
 
     <div class="sec-head"><h2>キャスト別</h2><div class="rule"></div></div>
     ${cs.length ? `<div class="castable">
-        <div class="ctr ch"><span>キャスト</span><span>本数</span><span>指名</span><span>同伴</span><span>小計</span></div>
+        <div class="ctr ch"><span>キャスト</span><span>指名</span><span>同伴</span><span>小計</span></div>
         ${cs.map(c=>`<div class="ctr ${c.total===0?"zero":""}">
-          <span>${esc(c.name)}${c.active===false?`<i class="off">退勤</i>`:""}</span><span>${c.count||"—"}</span>
+          <span>${esc(c.name)}${c.active===false?`<i class="off">退勤</i>`:""}</span>
           <span>${c.nom||"—"}</span><span>${c.douhan||"—"}</span>
           <span class="amt">${yen(c.total)}</span></div>`).join("")}
       </div>` : `<div class="empty">キャストが登録されていません。</div>`}
@@ -1590,9 +1632,10 @@ function stockList(){
             stockLabel(p)?`<em>${stockLabel(p)}</em>`:""}</div>
           <div class="sctl">
             <span class="slab">在庫</span>
-            <button class="sq" data-pstock="${p.id}:-1">−</button>
             <input class="stk" type="number" inputmode="numeric" min="0" value="${p.stock}" data-pstocknum="${p.id}">
-            <button class="sq" data-pstock="${p.id}:1">＋</button>
+            <span class="slab">追加本数</span>
+            <input class="stk add" type="number" inputmode="numeric" min="0" placeholder="0" data-paddnum="${p.id}">
+            <button class="tog" data-padd="${p.id}">在庫に追加</button>
           </div></div>`).join("")}</div>` : ""}
     </div>`;
   }).join("");
@@ -1600,7 +1643,7 @@ function stockList(){
 function viewStock(){
   return `<div class="sec-head" style="margin-top:0"><h2>在庫</h2><div class="rule"></div></div>
     ${stockList()}
-    <p class="note">「商品」欄で在庫管理する にした商品だけがここに並びます。注文が確定するたびに減り、0になると自動で<b style="color:var(--danger)">欠品</b>と表示されて注文端末で選べなくなります。数が戻ったら＋で在庫を足してください。</p>`;
+    <p class="note">「商品」欄で在庫管理する にした商品だけがここに並びます。注文が確定するたびに減り、0になると自動で<b style="color:var(--danger)">欠品</b>と表示されて注文端末で選べなくなります。仕入れが入ったら「追加本数」に入れて「在庫に追加」を押すと、現在の在庫にその分が足されます。</p>`;
 }
 
 /* ---- order terminal（注文専用・卓固定） ---- */
@@ -1862,13 +1905,24 @@ function viewSettings(){
     <input class="inp" value="${esc(t.name)}" data-tname="${t.id}" placeholder="卓名">
     <button class="del" data-deltable="${t.id}" aria-label="削除">✕</button></div>`).join("");
 
-  const cst = `<div data-draglist="cast">${state.casts.map(c=>`<div class="setrow" data-did="${c.id}">
-    <span class="dragh" data-drag="1">⠿</span>
-    <input class="inp" value="${esc(c.name)}" data-cname="${c.id}" placeholder="キャスト名">
-    <input class="inp pri" type="number" inputmode="numeric" value="${c.rank||0}" data-crank="${c.id}" title="初回の順番（数字が小さいほど先）">
-    <button class="tog" data-cfirst="${c.id}" aria-pressed="${c.first!==false}">${c.first!==false?"初回○":"初回×"}</button>
-    <button class="tog" data-ctog="${c.id}" aria-pressed="${c.active}">${c.active?"出勤":"退勤"}</button>
-    <button class="del" data-delcast="${c.id}" aria-label="削除">✕</button></div>`).join("")}</div>`;
+  const cst = `<div data-draglist="cast">${state.casts.map(c=>`<div class="setrow pcard" data-did="${c.id}">
+    <div class="prow-top">
+      <span class="dragh" data-drag="1">⠿</span>
+      <input class="inp" value="${esc(c.name)}" data-cname="${c.id}" placeholder="キャスト名">
+      <button class="del" data-delcast="${c.id}" aria-label="削除">✕</button>
+    </div>
+    <div class="prow-bot">
+      <div class="pfield"><label>順番</label>
+        <input class="inp pri" type="number" inputmode="numeric" value="${c.rank||0}" data-crank="${c.id}" title="初回の順番（数字が小さいほど先）"></div>
+      <div class="pfield"><label>初回</label>
+        <button class="tog wide" data-cfirst="${c.id}" aria-pressed="${c.active && c.first!==false}" ${c.active?"":"disabled"}
+          title="${c.active?"":"退勤中は初回に付けられません"}">${(c.active && c.first!==false)?"初回○":"初回×"}</button></div>
+      <div class="pfield"><label>総計</label>
+        <button class="tog wide" data-ctotal="${c.id}" aria-pressed="${c.countTotal!==false}"
+          title="オフにすると、個人の成績には出るが総売上には含めない">${c.countTotal!==false?"総計○":"総計×"}</button></div>
+      <div class="pfield"><label>状態</label>
+        <button class="tog wide" data-ctog="${c.id}" aria-pressed="${c.active}">${c.active?"出勤":"退勤"}</button></div>
+    </div></div>`).join("")}</div>`;
 
   const catRows = state.categories.map((c,i)=>`<div class="setrow">
     <span class="no">${i+1}</span>
@@ -1980,6 +2034,7 @@ function viewSettings(){
     ${feeRow("douhan","同伴料","ホール・管理者が卓ごとにオンにします")}
     ${feeRow("firstHigh","初回料金（高）","初回回しの開始時にどちらか選びます")}
     ${feeRow("firstLow","初回料金（低）","初回回しの開始時にどちらか選びます")}
+    ${feeRow("okuriSet","SET（飲み直し）","送り後に飲み直しを選ぶと、通常のセット料金の代わりに使います")}
     <div class="prow">
       <span class="flab">サービス料<small>小計にかかります</small></span>
       <div class="prow-b">
@@ -2083,9 +2138,10 @@ function viewSettings(){
 }
 
 function openSheet(html){
+  openSheetTableId = null;   // 他のシートに切り替わったら、卓シートの自動更新対象から外す
   $("#sheetHost").innerHTML = `<div class="sheet" data-sheet="1"><div class="panel">${html}</div></div>`;
 }
-function closeSheet(){ pendingAction = null; $("#sheetHost").innerHTML = ""; }
+function closeSheet(){ pendingAction = null; openSheetTableId = null; $("#sheetHost").innerHTML = ""; }
 
 /* アプリ内の確認画面（webviewでは confirm() がブロックされるため自前で用意） */
 let pendingAction = null;
@@ -2097,6 +2153,7 @@ function askConfirm(o){
     <div class="sheet-acts"><button class="btn gh" data-closesheet="1">やめる</button></div>`);
 }
 
+let openSheetTableId = null;   // 今この卓のシートが開いているか（tickでの自動更新に使う）
 function sheetTable(id){
   const t = tableOf(id); if(!t) return;
   const r = rotOf(t.id);
@@ -2123,33 +2180,57 @@ function sheetTable(id){
   const act = state.casts.filter(c=>c.active);
   const isFirstNow = t.firstFee !== null && t.firstFee !== undefined;
   const castLabel = isFirstNow ? "送り指名" : "担当キャスト";
+  /* 送り指名のときは、実際にこの卓の初回回しに付いた人だけを候補にする
+     （全キャストからの選び直しはさせない） */
+  const relatedRot = state.rotations.filter(r=>r.tableId===t.id).sort((a,b)=>b.startedAt-a.startedAt)[0];
+  const firstAttendees = relatedRot
+    ? [...new Set(relatedRot.order)].map(id=>state.casts.find(c=>c.id===id)).filter(Boolean)
+    : [];
+  const candidates = isFirstNow ? firstAttendees : act;
   const castField = `<div class="field"><label>${castLabel}${
       (t.casts&&t.casts.length)?`（${t.casts.length}人）`:""}</label>
-    ${act.length ? `<div class="castpick">${act.map(c=>{
+    ${candidates.length ? `<div class="castpick">${candidates.map(c=>{
         const on = (t.casts||[]).includes(c.id);
         return `<button data-tcast="${t.id}:${c.id}" aria-pressed="${on}">${esc(c.name)}</button>`;
       }).join("")}</div>`
-    : `<p class="note" style="margin:0">出勤中のキャストがいません。設定から登録してください。</p>`}</div>`;
+    : (isFirstNow
+        ? `<p class="note" style="margin:0">初回回しに付いたキャストがまだいません。</p>`
+        : `<p class="note" style="margin:0">出勤中のキャストがいません。設定から登録してください。</p>`)}</div>`;
 
+  const isOkuriNow = t.okuriFee !== null && t.okuriFee !== undefined;
   const feeField = t.seatedAt ? `<div class="field"><label>料金</label>
       <div class="feegrid">
         ${(t.firstFee !== null && t.firstFee !== undefined) ? `<button class="feebtn" data-firstoff="${t.id}" aria-pressed="true">
           <span class="ck">✓</span>初回料金 <span class="sub">押すと解除</span><b>${yen(t.firstFee)}</b></button>` : ""}
+        ${isOkuriNow ? `<button class="feebtn" data-okurioff="${t.id}" aria-pressed="true">
+          <span class="ck">✓</span>SET（飲み直し） <span class="sub">${okuriHours(t)>0?"1時間経過・":""}押すと通常セットに戻す</span>
+          <b>${yen(okuriFeeAmount(t))}</b></button>` : `
         <button class="feebtn" data-feetog="${t.id}:set" aria-pressed="${t.fees.set}">
           <span class="ck">✓</span>セット料金 <span class="sub">${isFreeTime(t)?"フリータイム":(stayHours(t)?stayHours(t)+"時間経過":"1時間以内")}</span>
-          <b>${yen(setFee(t))}</b></button>
+          <b>${yen(setFee(t))}</b></button>`}
         <button class="feebtn" data-feetog="${t.id}:nom" aria-pressed="${t.fees.nom}">
           <span class="ck">✓</span>指名料 <b>${yen(state.fees.nom)}</b></button>
         <button class="feebtn" data-feetog="${t.id}:douhan" aria-pressed="${t.fees.douhan}">
           <span class="ck">✓</span>同伴料 <b>${yen(state.fees.douhan)}</b></button>
       </div></div>` : "";
 
+  /* 飲み直しは1時間限定。1時間経ったら「通常料金に切り替えて続ける」か「会計」かを選ぶ。
+     切り替えると、飲み直しの1時間ぶんはそのまま残り、そこに通常のセット料金が上乗せされる。 */
+  const okuriBanner = (isOkuriNow && !t.okuriSwitchedAt && t.okuriStartedAt && (Date.now()-t.okuriStartedAt) >= 3600000)
+    ? `<div class="alert"><span class="ai"></span>
+        <div>飲み直しの<b>1時間</b>が経過しました。続ける場合は通常料金に切り替えてください
+          （飲み直しの ${yen(okuriFeeAmount(t))} に上乗せされます）。</div></div>
+      <div class="sheet-acts" style="margin:-4px 0 14px">
+        <button class="btn pri" data-okuriswitch="${t.id}">通常料金に切り替え</button>
+        <button class="btn warn" data-go="${t.id}:billing">会計へ</button>
+      </div>` : "";
+
   let extra = "", main = "", back = "";
   if(t.status === "empty"){
     extra = stepper + rotField;
     main  = `<button class="btn pri big wide" data-go="${t.id}:serving">接客開始</button>`;
   } else if(t.status === "serving"){
-    extra = nameField + stepper + castField + feeField + orderField + (rotActive ? rotField : "");
+    extra = nameField + okuriBanner + stepper + castField + feeField + orderField + (rotActive ? rotField : "");
     main  = `<button class="btn warn big wide" data-go="${t.id}:billing">会計</button>`;
     back  = `<button class="btn gh sm" data-go="${t.id}:empty">空席に戻す</button>`;
   } else if(t.status === "billing"){
@@ -2175,6 +2256,7 @@ function sheetTable(id){
       <button class="btn gh" data-closesheet="1">閉じる</button>
       ${back}
     </div>`);
+  openSheetTableId = id;   // openSheet()が追跡をクリアした直後に、この卓のIDとして記録し直す
 }
 
 let newCat = "";   // 設定画面で入力中の新しいジャンル名
@@ -2406,7 +2488,7 @@ function renderNewRot(){
 
 /* ========== events ========== */
 document.addEventListener("click", e=>{
-  const el = e.target.closest("[data-cfmin],[data-cfminset],[data-cfback],[data-cfgo],[data-cfirst],[data-capmin],[data-autorot],[data-brange],[data-resetsales],[data-mcat],[data-newcode],[data-synctest],[data-btab],[data-obill],[data-receipt],[data-srange],[data-ptrack],[data-tcast],[data-persist],[data-firstoff],[data-dfee],[data-sec],[data-cat],[data-catadd],[data-catdel],[data-kdone],[data-kundo],[data-pstock],[data-feeon],[data-feetog],[data-idle],[data-okconfirm],[data-dev],[data-devclose],[data-devset],[data-tcancel],[data-tbus],[data-tstart],[data-thome],[data-ttab],[data-cadd],[data-cqty],[data-confirm],[data-cclear],[data-tbill],[data-key],[data-acct],[data-logout],[data-otab],[data-addacct],[data-adel],[data-tab],[data-filter],[data-table],[data-closesheet],[data-go],[data-guest],[data-new-rot],[data-order],[data-qty],[data-addprod],[data-pdel],[data-goto-rot],[data-next-rot],[data-pause-rot],[data-extend-rot],[data-close-rot],[data-restart-rot],[data-tcount],[data-tset],[data-dmin],[data-addcast],[data-delcast],[data-ctog],[data-deltable],[data-reset],[data-pick],[data-mv],[data-rm],[data-dguest],[data-dmin2],[data-dminset],[data-dper],[data-startrot]");
+  const el = e.target.closest("[data-okuriswitch],[data-okurioff],[data-oknomonly],[data-okuri],[data-okpick],[data-okgo],[data-ctotal],[data-cfmin],[data-cfminset],[data-cfback],[data-cfgo],[data-cfirst],[data-capmin],[data-autorot],[data-brange],[data-resetsales],[data-mcat],[data-newcode],[data-synctest],[data-btab],[data-obill],[data-receipt],[data-srange],[data-ptrack],[data-tcast],[data-persist],[data-firstoff],[data-dfee],[data-sec],[data-cat],[data-catadd],[data-catdel],[data-kdone],[data-kundo],[data-padd],[data-feeon],[data-feetog],[data-idle],[data-okconfirm],[data-dev],[data-devclose],[data-devset],[data-tcancel],[data-tbus],[data-tstart],[data-thome],[data-ttab],[data-cadd],[data-cqty],[data-confirm],[data-cclear],[data-tbill],[data-key],[data-acct],[data-logout],[data-otab],[data-addacct],[data-adel],[data-tab],[data-filter],[data-table],[data-closesheet],[data-go],[data-guest],[data-new-rot],[data-order],[data-qty],[data-addprod],[data-pdel],[data-goto-rot],[data-next-rot],[data-pause-rot],[data-extend-rot],[data-close-rot],[data-restart-rot],[data-tcount],[data-tset],[data-dmin],[data-addcast],[data-delcast],[data-ctog],[data-deltable],[data-reset],[data-pick],[data-mv],[data-rm],[data-dguest],[data-dmin2],[data-dminset],[data-dper],[data-startrot]");
   if(!el){
     if(e.target.dataset && e.target.dataset.sheet) closeSheet();
     return;
@@ -2424,6 +2506,7 @@ document.addEventListener("click", e=>{
   if(d.dev){ devPin=""; devErr=""; devAuthed=false; sheetDevice(); return; }
   if(d.devclose){ devPin=""; devErr=""; devAuthed=false; closeSheet(); return; }
   if(d.devset){
+    if(!tableOf(d.devset)) return;
     state.deviceTable = d.devset;
     state.term = { stage:"idle", tab:"menu", cat:"*" };
     devPin=""; devErr=""; devAuthed=false;
@@ -2477,12 +2560,12 @@ document.addEventListener("click", e=>{
     return;
   }
   if(d.tcancel){
-    const t = tableOf(d.tcancel);
+    const t = tableOf(d.tcancel); if(!t) return;
     go(t,"serving"); state.term = {stage:"idle", tab:"menu", cat:"*"}; commit();
     toast("会計をキャンセルしました"); return;
   }
   if(d.tbus){
-    const t = tableOf(d.tbus);
+    const t = tableOf(d.tbus); if(!t) return;
     go(t,"empty"); state.term = {stage:"idle", tab:"menu", cat:"*"}; commit();
     toast("バッシング完了：空席に戻しました"); return;
   }
@@ -2525,7 +2608,7 @@ document.addEventListener("click", e=>{
 
   /* table sheet */
   if(d.go){
-    const [id,k] = d.go.split(":"); const t = tableOf(id);
+    const [id,k] = d.go.split(":"); const t = tableOf(id); if(!t) return;
     if(k === "closed" && !can("manage")){ toast("会計完了はホール・管理者が行います"); return; }
     const inSheet = !!$("#sheetHost").firstElementChild;
     go(t,k); commit();
@@ -2533,23 +2616,36 @@ document.addEventListener("click", e=>{
     return;
   }
   if(d.guest){
-    const [id,dv] = d.guest.split(":"); const t = tableOf(id);
+    const [id,dv] = d.guest.split(":"); const t = tableOf(id); if(!t) return;
     t.guests = Math.max(0, Math.min(30, t.guests + Number(dv)));
     sheetTable(id); commit(); return;
   }
   if(d.firstoff){
-    const t = tableOf(d.firstoff);
+    const t = tableOf(d.firstoff); if(!t) return;
     t.firstFee = null; t.fees.set = true; t.fees.nom = true;
     sheetTable(t.id); commit(); toast("初回料金を解除しました"); return;
   }
+  if(d.okurioff){
+    const t = tableOf(d.okurioff); if(!t) return;
+    t.okuriFee = null; t.okuriStartedAt = null; t.okuriSwitchedAt = null; t.fees.set = true;
+    sheetTable(t.id); commit(); toast("SET（飲み直し）を解除し、通常のセット料金に戻しました"); return;
+  }
+  if(d.okuriswitch){
+    const t = tableOf(d.okuriswitch); if(!t) return;
+    t.okuriSwitchedAt = Date.now();   // ここから通常のセット料金を数え始める
+    t.fees.set = true;                 // 飲み直しの1時間ぶんは残したまま、上乗せで加算する
+    sheetTable(t.id); commit();
+    toast(`通常料金に切り替えました（SET（飲み直し）${yen(okuriFeeAmount(t))} に上乗せ）`);
+    return;
+  }
   if(d.tcast){
-    const [id,cid] = d.tcast.split(":"); const t = tableOf(id);
+    const [id,cid] = d.tcast.split(":"); const t = tableOf(id); if(!t) return;
     if(!t.casts) t.casts = [];
     t.casts = t.casts.includes(cid) ? t.casts.filter(x=>x!==cid) : t.casts.concat(cid);
     sheetTable(id); commit(); return;
   }
   if(d.feetog){
-    const [id,key] = d.feetog.split(":"); const t = tableOf(id);
+    const [id,key] = d.feetog.split(":"); const t = tableOf(id); if(!t) return;
     t.fees[key] = !t.fees[key];
     sheetTable(id); commit(); return;
   }
@@ -2588,10 +2684,18 @@ document.addEventListener("click", e=>{
     if(p){ p.track = !p.track; if(p.track && p.stock <= 0) p.stock = 10; }
     commit(); return;
   }
-  if(d.pstock){
-    const [pid,dv] = d.pstock.split(":"); const p = prodOf(pid);
-    if(p) p.stock = Math.max(0, p.stock + Number(dv));
-    commit(); return;
+  if(d.padd){
+    const p = prodOf(d.padd); if(!p) return;
+    const row = el.closest(".strow");
+    const input = row && row.querySelector("[data-paddnum]");
+    const addQty = Math.max(0, parseInt(input && input.value, 10) || 0);
+    if(addQty > 0){
+      p.stock = Math.max(0, p.stock + addQty);
+      if(input) input.value = "";
+      toast(`${p.name} の在庫に ${addQty} 本追加（在庫 ${p.stock}）`);
+      commit();
+    }
+    return;
   }
 
   /* sections / categories */
@@ -2639,25 +2743,74 @@ document.addEventListener("click", e=>{
   /* rotation */
   if(d.newRot){ sheetNewRot(d.newRot==="1"?null:d.newRot); return; }
   if(d.gotoRot){ closeSheet(); state.tab="first"; render(); return; }
-  if(d.nextRot){ advance(state.rotations.find(r=>r.id===d.nextRot)); return; }
+  if(d.nextRot){ const r=state.rotations.find(x=>x.id===d.nextRot); if(r) advance(r); return; }
   if(d.pauseRot){
-    const r = state.rotations.find(x=>x.id===d.pauseRot);
+    const r = state.rotations.find(x=>x.id===d.pauseRot); if(!r) return;
     if(r.runningSince){ r.elapsedMs += Date.now()-r.runningSince; r.runningSince=null; }
     else r.runningSince = Date.now();
     commit(); return;
   }
   if(d.extendRot){
-    const r = state.rotations.find(x=>x.id===d.extendRot);
+    const r = state.rotations.find(x=>x.id===d.extendRot); if(!r) return;
     r.elapsedMs -= 60000; commit(); toast("1分延長しました"); return;
   }
   if(d.closeRot){
-    const r = state.rotations.find(x=>x.id===d.closeRot);
+    const r = state.rotations.find(x=>x.id===d.closeRot); if(!r) return;
     r.closed = true; commit(); toast("初回回しを終了しました"); return;
   }
   if(d.restartRot){
-    const r = state.rotations.find(x=>x.id===d.restartRot);
+    const r = state.rotations.find(x=>x.id===d.restartRot); if(!r) return;
     r.done=false; r.index=0; r.elapsedMs=0; r.runningSince=Date.now(); r.startedAt=Date.now();
     commit(); return;
+  }
+  if(d.okuri){ okuriSel = []; sheetOkuri(d.okuri); return; }
+  if(d.okpick){
+    const [rid,cid] = d.okpick.split(":");
+    const r = state.rotations.find(x=>x.id===rid);
+    const limit = Math.max(1, (r&&r.guests) || (tableOf(r&&r.tableId)||{}).guests || 1);
+    const i = okuriSel.indexOf(cid);
+    if(i>=0) okuriSel.splice(i,1);
+    else if(okuriSel.length < limit) okuriSel.push(cid);
+    sheetOkuri(rid); return;
+  }
+  if(d.okgo){
+    const r = state.rotations.find(x=>x.id===d.okgo);
+    if(r && okuriSel.length){
+      const t = tableOf(r.tableId);
+      if(t){
+        t.casts = okuriSel.slice();       // 送り指名の人を、以後は担当キャストとして扱う
+        t.firstFee = null;                 // 初回料金は終了
+        t.okuriFee = state.fees.okuriSet;  // 飲み直しのSET（1時間目は固定額）に切り替え
+        t.okuriStartedAt = Date.now();     // 飲み直しの1時間はここから
+        t.okuriSwitchedAt = null;
+        t.fees.set = false;                // 通常の時間制セットは使わない（okuriFeeで代用）
+        t.fees.nom = true;                 // 指名料は通常どおり
+      }
+      r.closed = true;
+      const names = okuriSel.map(castName).join("・");
+      okuriSel = [];
+      closeSheet(); commit();
+      toast(`${t?t.name:""}卓：${names} で飲み直しへ（SET${yen(state.fees.okuriSet)}＋指名料）`);
+    }
+    return;
+  }
+  if(d.oknomonly){
+    const r = state.rotations.find(x=>x.id===d.oknomonly);
+    if(r && okuriSel.length){
+      const t = tableOf(r.tableId);
+      if(t){
+        t.casts = okuriSel.slice();       // 指名の記録だけ付ける
+        // 料金は初回で選んだものをそのまま使う（t.firstFee はここでは変更しない）
+      }
+      r.closed = true;
+      const names = okuriSel.map(castName).join("・");
+      okuriSel = [];
+      closeSheet();
+      if(t && t.status === "serving") go(t,"billing");   // これ以上は注文しない想定で会計へ
+      commit();
+      toast(`${t?t.name:""}卓：${names} 送り指名で会計へ（初回料金のまま）`);
+    }
+    return;
   }
 
   /* new rotation draft */
@@ -2699,10 +2852,19 @@ document.addEventListener("click", e=>{
     commit(); return;
   }
   if(d.delcast){ state.casts = state.casts.filter(c=>c.id!==d.delcast); commit(); return; }
-  if(d.ctog){ const c = state.casts.find(x=>x.id===d.ctog); c.active = !c.active; commit(); return; }
-  if(d.cfirst){ const c = state.casts.find(x=>x.id===d.cfirst); c.first = !c.first; commit(); return; }
+  if(d.ctog){ const c = state.casts.find(x=>x.id===d.ctog); if(!c) return; c.active = !c.active; commit(); return; }
+  if(d.cfirst){
+    const c = state.casts.find(x=>x.id===d.cfirst);
+    if(!c || !c.active) return;         // 退勤中は初回の切り替えをさせない
+    c.first = !c.first; commit(); return;
+  }
+  if(d.ctotal){
+    const c = state.casts.find(x=>x.id===d.ctotal);
+    if(c) c.countTotal = !(c.countTotal !== false);
+    commit(); return;
+  }
   if(d.deltable){
-    const t = tableOf(d.deltable);
+    const t = tableOf(d.deltable); if(!t) return;
     if(t.status!=="empty"){ toast("使用中の卓は削除できません"); return; }
     delete state.orders[t.id]; delete state.cart[t.id];
     state.accounts.forEach(a=>{ if(a.tableId===t.id) a.tableId = null; });
@@ -2903,7 +3065,8 @@ function go(t, k){
     const r = rotOf(t.id); if(r) r.closed = true;
     delete state.orders[t.id];        // バッシング完了で伝票をリセット
     delete state.cart[t.id];
-    t.guests = 0; t.seatedAt = null; t.billedAt = null; t.firstFee = null; t.casts = []; t.customerName = "";
+    t.guests = 0; t.seatedAt = null; t.billedAt = null; t.firstFee = null;
+    t.okuriFee = null; t.okuriStartedAt = null; t.okuriSwitchedAt = null; t.casts = []; t.customerName = "";
     t.fees = { set:true, nom:true, douhan:false };
   }
   t.status = k; t.statusSince = Date.now();
@@ -2927,6 +3090,30 @@ function changeTableCount(n){
 
 /* 「開始する」を押すと、まずこの確認シートを挟む。
    ここで時間を確認・調整してから、実際にstartRotation()を呼ぶ。 */
+/* 「送り」：初回に付いた人の中から、来店人数ぶんまで選べる。
+   選ぶと2つの選択肢が出る：
+   ・飲み直し … このまま担当キャストとして続けて接客する（接客中のまま）
+   ・送り指名のみ … 指名の記録だけ付けて、会計へ進む（これ以上は注文しない想定） */
+let okuriSel = [];
+function sheetOkuri(rotId){
+  const r = state.rotations.find(x=>x.id===rotId); if(!r) return;
+  const t = tableOf(r.tableId);
+  const attendees = [...new Set(r.order)].map(id=>state.casts.find(c=>c.id===id)).filter(Boolean);
+  const limit = Math.max(1, r.guests || t?.guests || 1);
+
+  openSheet(`<h3>送りを選ぶ<small>${t?esc(t.name)+"卓":""} ・ 初回に付いた人だけ表示 ・ 最大${limit}名</small></h3>
+    ${attendees.length ? `<div class="castpick">${attendees.map(c=>{
+        const on = okuriSel.includes(c.id);
+        return `<button data-okpick="${rotId}:${c.id}" aria-pressed="${on}" ${(!on && okuriSel.length>=limit)?"disabled":""}>${esc(c.name)}</button>`;
+      }).join("")}</div>
+      <p class="round-hint">${okuriSel.length}／${limit}名 選択中</p>`
+      : `<p class="note" style="margin:0">この初回に付いたキャストがいません。</p>`}
+    ${okuriSel.length ? `
+      <button class="btn pri wide" style="margin-top:12px" data-okgo="${rotId}">飲み直し</button>
+      <button class="btn wide" style="margin-top:8px" data-oknomonly="${rotId}">送り指名のみ</button>` : ""}
+    <div class="sheet-acts"><button class="btn gh" data-closesheet="1">閉じる</button></div>`);
+}
+
 function sheetConfirmStart(){
   const d = draft; if(!d) return;
   const t = tableOf(d.tableId);
@@ -3440,8 +3627,6 @@ function dragStart(e){
   e.preventDefault();
   try{ handle.setPointerCapture(e.pointerId); }catch(err){}
   row.classList.add("dragging");
-  handle.classList.add("pulse");
-  setTimeout(()=>handle.classList.remove("pulse"), 500);
   dctx = { row, list, pid:e.pointerId };
   document.addEventListener("pointermove", dragMove);
   document.addEventListener("pointerup", dragEnd);
@@ -3455,27 +3640,9 @@ function dragMove(e){
   if(!overRow || overRow === dctx.row) return;
   if(overRow.closest("[data-draglist]") !== dctx.list) return;   // ジャンルをまたいだ並べ替えはしない
 
-  /* FLIP：並び替え前の位置を全行ぶん記録しておき、insertBefore で瞬間移動させたあと
-     差分だけ逆向きに一瞬ずらして、0へアニメーションで戻す＝滑らかに動いて見える */
-  const rows = [...dctx.list.children].filter(el=>el.matches && el.matches("[data-did]"));
-  const before = rows.map(el=>({ el, top: el.getBoundingClientRect().top }));
-
   const rect = overRow.getBoundingClientRect();
   const putBefore = (e.clientY - rect.top) < rect.height / 2;
-  dctx.list.insertBefore(dctx.row, putBefore ? overRow : overRow.nextSibling);
-
-  before.forEach(b=>{
-    if(b.el === dctx.row) return;                     // つかんでいる行自身は別演出（CSSのscale）に任せる
-    const after = b.el.getBoundingClientRect().top;
-    const delta = b.top - after;
-    if(Math.abs(delta) < 1) return;
-    b.el.style.transition = "none";
-    b.el.style.transform = `translateY(${delta}px)`;
-    requestAnimationFrame(()=>{
-      b.el.style.transition = "transform .16s ease";
-      b.el.style.transform = "";
-    });
-  });
+  dctx.list.insertBefore(dctx.row, putBefore ? overRow : overRow.nextSibling);   // アニメーションなしで即座に入れ替え
 }
 function dragEnd(){
   if(!dctx) return;
@@ -3570,7 +3737,17 @@ function tick(){
     const h = stayHours(t);
     if(t._h !== h){ if(t._h !== undefined) feeChanged = true; t._h = h; }
   });
-  if(feeChanged){ render(); return; }
+  /* 飲み直しが1時間を超えた瞬間に、会計を促すバナーを出すため画面を更新する（料金自体は増えない） */
+  state.tables.forEach(t=>{
+    if(t.okuriFee === null || t.okuriFee === undefined || !t.okuriStartedAt) return;
+    const oh = okuriHours(t);
+    if(t._okH !== oh){ if(t._okH !== undefined) feeChanged = true; t._okH = oh; }
+  });
+  if(feeChanged){
+    render();
+    if(openSheetTableId) sheetTable(openSheetTableId);   // シートを開いたままでも金額表示を更新する
+    return;
+  }
 
   document.querySelectorAll("[data-tick]").forEach(el=>{
     const [kind, val] = el.dataset.tick.split(":");
@@ -3579,7 +3756,7 @@ function tick(){
       const r = state.rotations.find(x=>x.id===val);
       if(!r) return;
       const rem = remain(r);
-      el.textContent = fmt(rem);
+      el.textContent = fmt(Math.max(0, rem));   // 時間が来たら0で止め、超過をカウントアップしない
       el.classList.toggle("over", rem < 0);
     }
   });
